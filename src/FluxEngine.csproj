@@ -1,2 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <AssemblyName>FluxEngine</AssemblyName>
+    <RootNamespace>FluxEngine</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SDL2-CS" Version="2.0.0" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="$(NuGetPackageRoot)sdl2-cs\2.0.0\content\net20\SDL2-CS\SDL2.cs"
+             Link="SDL2\SDL2.cs" />
+    <Compile Include="$(NuGetPackageRoot)sdl2-cs\2.0.0\content\net20\SDL2-CS\LPUtf8StrMarshaler.cs"
+             Link="SDL2\LPUtf8StrMarshaler.cs" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
 </Project>
