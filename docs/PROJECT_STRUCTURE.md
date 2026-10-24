@@ -4,9 +4,9 @@
 FluxEngine.slnx
 Directory.Build.props
 src/
-  FluxEngine.csproj       The single engine project
+  FluxEngine.csproj       The engine project
   FluxEngine.Core/
-    Engine.cs             Engine entry point placeholder
+    Engine.cs             Engine loop
     Scene.cs              Scene placeholder
   FluxEngine.Mathematics/
     Vector2.cs            Vector type placeholder
@@ -14,22 +14,23 @@ src/
     Renderer.cs           Renderer placeholder
     Sprite.cs             Sprite placeholder
   FluxEngine.Platform/
-    Window.cs             Window placeholder
+    Window.cs             SDL window and simple rectangle drawing
   FluxEngine.Input/
-    InputManager.cs       Input placeholder
+    InputManager.cs       Platform-independent input state
   FluxEngine.Physics/
     Collider.cs           Collision placeholder
   FluxEngine.Audio/
     AudioManager.cs       Audio placeholder
   FluxEngine.Content/
     AssetManager.cs       Content placeholder
+demos/
+  FluxEngine.Demo/        WASD window and movement demo
 tests/                    Automated tests
 docs/                     Project documentation
 ```
 
-There is one .NET project. The folders under `src/` are organizational only,
-not separate projects. The listed types are empty placeholders with no engine
-behavior. Add future implementation to the matching subsystem folder.
+The folders under `src/` are organizational only, not separate projects. The
+WASD demo is a separate runnable project and is not compiled into the engine.
+Run it with `dotnet run --project demos/FluxEngine.Demo`.
 
-Put test files in `tests/` and documentation in `docs/`. This is structure
-only; engine systems have not been implemented.
+Put test files in `tests/` and documentation in `docs/`.
