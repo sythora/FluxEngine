@@ -46,6 +46,36 @@ Delta is based on movement since last frame. Scroll accumulates per frame.
 
 `HasFocus` tells if the window has focus. If focus is lost, input is cleared so stuck keys/buttons don't stay active.
 
+## Input Actions
+
+Raw keys work fine but hardcoding `Key.W` in ten places is pain when you add
+controller support or a rebind menu. `InputManager.Actions` gives names to
+inputs instead:
+
+```csharp
+var actions = engine.Input.Actions;
+
+actions.Bind("jump", Key.Space, Key.W);
+actions.Bind("move.left", Key.A, Key.Left);
+actions.Bind("move.right", Key.D, Key.Right);
+actions.BindButton("shoot", MouseButton.Left);
+```
+
+Then game code asks for the action, not the key:
+
+```csharp
+if (actions.WasPressed("jump"))
+    Jump();
+
+var move = actions.Axis("move.left", "move.right"); // -1, 0 or 1
+```
+
+You can bind more than one key to the same action. `IsDown` checks held keys
+and mouse buttons, `WasPressed` and `WasReleased` only fire on the frame the
+thing changed. `Unbind(name)` removes one action, `Clear()` removes all.
+
+Bindings live on the input manager, so bind them once before `engine.Run`.
+
 ## Testing
 
 Run the input test from the repo folder:

@@ -4,6 +4,11 @@ namespace FluxEngine.Input;
 
 public sealed class InputManager
 {
+    private InputActions? _actions;
+
+    // named bindings, sits on top of the raw key checks below
+    public InputActions Actions => _actions ??= new InputActions(this);
+
     private readonly HashSet<Key> _heldKeys = [];
     private readonly HashSet<Key> _pressedKeys = [];
     private readonly HashSet<Key> _releasedKeys = [];

@@ -1,2 +1,5 @@
 <Solution>
   <Project Path="src/FluxEngine.csproj" />
+  <Project Path="editor/FluxEngine.Editor.csproj" />
+  <Project Path="demos/FluxEngine.Demo/FluxEngine.Demo.csproj" />
+</Solution>

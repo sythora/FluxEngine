@@ -7,7 +7,13 @@
     <AssemblyName>FluxEngine</AssemblyName>
     <RootNamespace>FluxEngine</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- the code uses plain comments, no xml docs, stop the noise -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="FluxEngine.Editor/**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="SDL2-CS" Version="2.0.0" GeneratePathProperty="true" />
