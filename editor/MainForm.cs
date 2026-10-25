@@ -14,6 +14,7 @@ public sealed partial class MainForm : Form
     private Panel _canvasPanel;
     private PictureBox _canvas;
     private ToolStrip _toolbar;
+    private ToolStripButton? _snapButton;
     private Panel _props;
     private Label _propTitle;
     private FlowLayoutPanel _propFields;
@@ -45,6 +46,8 @@ public sealed partial class MainForm : Form
         BuildCanvas();
         BuildProperties();
         BuildStatus();
+        KeyPreview = true;
+        KeyDown += MainForm_KeyDown;
 
         Load += MainForm_Load;
         FormClosing += MainForm_FormClosing;
@@ -55,10 +58,14 @@ public sealed partial class MainForm : Form
         var menu = new MenuStrip();
         var file = new ToolStripMenuItem("File");
 
-        file.DropDownItems.Add("New", null, (_, _) => NewFile());
-        file.DropDownItems.Add("Open...", null, (_, _) => OpenFile());
-        file.DropDownItems.Add("Save", null, (_, _) => SaveFile());
-        file.DropDownItems.Add("Save As...", null, (_, _) => SaveFileAs());
+        var newItem = new ToolStripMenuItem("New", null, (_, _) => NewFile()) { ShortcutKeys = Keys.Control | Keys.N };
+        var openItem = new ToolStripMenuItem("Open...", null, (_, _) => OpenFile()) { ShortcutKeys = Keys.Control | Keys.O };
+        var saveItem = new ToolStripMenuItem("Save", null, (_, _) => SaveFile()) { ShortcutKeys = Keys.Control | Keys.S };
+        var saveAsItem = new ToolStripMenuItem("Save As...", null, (_, _) => SaveFileAs()) { ShortcutKeys = Keys.Control | Keys.Shift | Keys.S };
+        file.DropDownItems.Add(newItem);
+        file.DropDownItems.Add(openItem);
+        file.DropDownItems.Add(saveItem);
+        file.DropDownItems.Add(saveAsItem);
         file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add("Exit", null, (_, _) => Close());
 
@@ -95,13 +102,13 @@ public sealed partial class MainForm : Form
 
         _toolbar.Items.Add(new ToolStripSeparator());
 
-        var snapBtn = new ToolStripButton("Grid Snap")
+        _snapButton = new ToolStripButton("Grid Snap")
         {
             CheckOnClick = true,
             Checked = true,
         };
-        snapBtn.Click += (_, _) => _gridSnap = snapBtn.Checked;
-        _toolbar.Items.Add(snapBtn);
+        _snapButton.Click += (_, _) => _gridSnap = _snapButton.Checked;
+        _toolbar.Items.Add(_snapButton);
 
         var zoomIn = new ToolStripButton("Zoom +");
         zoomIn.Click += (_, _) => { _zoom = Math.Min(4f, _zoom + 0.25f); _canvas.Invalidate(); };
@@ -220,7 +227,103 @@ public sealed partial class MainForm : Form
     private void SetTool(string tool)
     {
         _currentTool = tool;
-        _selected = null;
+        SelectObject(null);
+    }
+
+    private void MainForm_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (ActiveControl is TextBoxBase or NumericUpDown or ComboBox)
+            return;
+
+        if (e.Control && e.KeyCode == Keys.D)
+        {
+            DuplicateSelected();
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            return;
+        }
+
+        if (e.KeyCode == Keys.Delete && _selected is not null)
+        {
+            var removed = _selected;
+            _objects.Remove(removed);
+            SelectObject(_objects.Count > 0 ? _objects[^1] : null);
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+            return;
+        }
+
+        if (e.KeyCode == Keys.G && !e.Control && !e.Alt)
+        {
+            _gridSnap = !_gridSnap;
+            if (_snapButton is not null)
+                _snapButton.Checked = _gridSnap;
+            _canvas.Invalidate();
+            e.Handled = true;
+            return;
+        }
+
+        if (_selected is not null && e.KeyCode is Keys.Left or Keys.Right or Keys.Up or Keys.Down)
+        {
+            var step = _gridSnap ? _gridSize : 1f;
+            var delta = e.KeyCode switch
+            {
+                Keys.Left => new Vector2(-step, 0),
+                Keys.Right => new Vector2(step, 0),
+                Keys.Up => new Vector2(0, -step),
+                _ => new Vector2(0, step),
+            };
+            MoveObject(_selected, delta);
+            _canvas.Invalidate();
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+        }
+    }
+
+    private void DuplicateSelected()
+    {
+        if (_selected is null)
+            return;
+
+        var offset = _gridSnap ? _gridSize : 16f;
+        EditableObject copy = _selected switch
+        {
+            PlayerObject player => new PlayerObject { Position = player.Position + new Vector2(offset, offset) },
+            PlatformObject platform => new PlatformObject
+            {
+                Position = platform.Position + new Vector2(offset, offset), W = platform.W, H = platform.H, OneWay = platform.OneWay,
+            },
+            CoinObject coin => new CoinObject { Position = coin.Position + new Vector2(offset, offset) },
+            SpikeObject spike => new SpikeObject { Position = spike.Position + new Vector2(offset, offset) },
+            CheckpointObject checkpoint => new CheckpointObject { Position = checkpoint.Position + new Vector2(offset, offset) },
+            GoalObject goal => new GoalObject { Position = goal.Position + new Vector2(offset, offset) },
+            MoverObject mover => new MoverObject
+            {
+                Position = mover.Position + new Vector2(offset, offset),
+                Start = mover.Start + new Vector2(offset, offset), End = mover.End + new Vector2(offset, offset), Speed = mover.Speed,
+            },
+            _ => throw new InvalidOperationException($"Unsupported editor object type: {_selected.GetType().Name}"),
+        };
+
+        _objects.Add(copy);
+        SelectObject(copy);
+    }
+
+    private static void MoveObject(EditableObject obj, Vector2 delta)
+    {
+        obj.Position += delta;
+        if (obj is MoverObject mover)
+        {
+            mover.Start += delta;
+            mover.End += delta;
+        }
+    }
+
+    private void SelectObject(EditableObject? obj)
+    {
+        _selected = obj;
+        foreach (var item in _objects)
+            item.Selected = ReferenceEquals(item, obj);
         RebuildProperties();
         _canvas.Invalidate();
     }
@@ -321,8 +424,7 @@ public sealed partial class MainForm : Form
                 Speed = m.Speed,
             });
 
-        _selected = _objects.Count > 0 ? _objects[0] : null;
-        RebuildProperties();
+        SelectObject(_objects.Count > 0 ? _objects[0] : null);
     }
 
     private void AddObjectAt(Vector2 worldPos)
@@ -347,9 +449,7 @@ public sealed partial class MainForm : Form
         }
 
         _objects.Add(obj);
-        _selected = obj;
-        RebuildProperties();
-        _canvas.Invalidate();
+        SelectObject(obj);
     }
 
     private void RebuildProperties()
@@ -409,9 +509,7 @@ public sealed partial class MainForm : Form
         delBtn.Click += (_, _) =>
         {
             _objects.Remove(_selected!);
-            _selected = _objects.Count > 0 ? _objects[0] : null;
-            RebuildProperties();
-            _canvas.Invalidate();
+            SelectObject(_objects.Count > 0 ? _objects[0] : null);
         };
         _propFields.Controls.Add(delBtn);
     }
@@ -505,7 +603,7 @@ public sealed partial class MainForm : Form
 
         if (picked is not null)
         {
-            _selected = picked;
+            SelectObject(picked);
             _dragging = true;
             _dragObject = picked;
             _dragStart = picked.Position;
