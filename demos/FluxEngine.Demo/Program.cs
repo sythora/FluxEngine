@@ -79,6 +79,7 @@ var bg = bgEnt.AddComponent<ParallaxBackground>();
 // ---------------------------------------------------------------------------
 
 var state = 0; // 0=StartMenu, 1=Playing, 2=Paused, 3=GameOver
+var debugOverlay = new DebugOverlay(engine.Input.Actions);
 var score = 0;
 var bestDistance = 0f;
 var hasBestDistance = false;
@@ -155,6 +156,9 @@ engine.Run(
     update: deltaTime =>
     {
         // --- Input handling that works in all states ---
+        if (actions.WasPressed("debug.toggle"))
+            debugOverlay.Enabled = !debugOverlay.Enabled;
+
         if (state == 0 && actions.WasPressed("jump"))
         {
             state = 1;
@@ -273,6 +277,7 @@ engine.Run(
 
         scene.Draw(engine.Renderer);
         ui.OnDraw(engine.Renderer);
+        debugOverlay.Draw(engine.Renderer, scene, Time.UnscaledDeltaTime);
 
         engine.Window.Present();
     });

@@ -9,6 +9,7 @@ public abstract class ColliderComponent : Component
 {
     public Vector2 Size = new(32, 32);
     public Vector2 Offset;
+    public bool IsTrigger { get; set; }
 
     public BoxCollider Bounds => new(Entity.Position + Offset, Size);
 

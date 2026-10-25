@@ -52,8 +52,13 @@ public sealed class PlayerController : Component
         _anim = Entity.AddComponent<AnimatedSpriteRenderer>();
         _anim.Color = Color.White;
         _anim.Layer = 10;
-        _anim.FrameTime = 0.12f;
-        _anim.PlayOnStart = true;
+        _anim.PlayOnStart = false;
+        _anim.AddClip(new AnimationClip("Idle", [LoadSprite("player_idle")], 0.1f));
+        _anim.AddClip(new AnimationClip("Run", [LoadSprite("player_run_0"), LoadSprite("player_run_1")], 0.12f));
+        _anim.AddClip(new AnimationClip("Jump", [LoadSprite("player_jump")], 0.1f));
+        _anim.AddClip(new AnimationClip("Fall", [LoadSprite("player_jump")], 0.1f));
+        _anim.Play("Idle");
+        _sprite.Color = Color.Transparent;
 
         _body = Entity.AddComponent<Rigidbody2D>();
         _body.Size = new Vector2(16, 28);
@@ -139,35 +144,22 @@ public sealed class PlayerController : Component
 
         if (!grounded)
         {
-            _anim.Stop();
-            _sprite.Sprite = null;
-            _sprite.Color = Color.White;
-            _sprite.Size = new Vector2(22, 32);
+            var clip = _body.Velocity.Y < 0 ? "Jump" : "Fall";
+            _anim.Play(clip, restart: false);
         }
         else if (absVelX > 20f)
         {
-            _runAnimTimer += deltaTime;
-            if (_runAnimTimer >= 0.15f)
-            {
-                _runAnimTimer = 0;
-                _anim.Frames.Clear();
-                _anim.Frames.Add(LoadSprite("player_run_0"));
-                _anim.Frames.Add(LoadSprite("player_run_1"));
-                _anim.Loop = true;
-                _anim.Play();
-            }
+            _anim.Play("Run", restart: false);
         }
         else
         {
-            _anim.Stop();
-            _sprite.Sprite = null;
+            _anim.Play("Idle", restart: false);
         }
 
-        // Flip sprite horizontally
-        if (_sprite.Sprite?.Texture is not null)
-            _sprite.Sprite.FlipX = !_facingRight;
-
-        _sprite.Entity.Scale = new Vector2(_facingRight ? 1 : -1, 1);
+        // Flip the active clip consistently when changing animation states.
+        foreach (var frame in _anim.Frames)
+            frame.FlipX = !_facingRight;
+        _anim.Entity.Scale = new Vector2(_facingRight ? 1 : -1, 1);
 
         // Dust puffs when running on ground
         if (grounded && absVelX > 60f)

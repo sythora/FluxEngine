@@ -1,5 +1,6 @@
 using System.Text.Json;
 using FluxEngine.Core;
+using FluxEngine.Graphics;
 using FluxEngine.Mathematics;
 using FluxEngine.Physics;
 
@@ -69,6 +70,8 @@ finally
 }
 
 TestCollisionResolution();
+TestPhysicsQueries();
+TestAnimationClips();
 TestEntityLifecycle();
 TestGameTimer();
 TestLevelLoader();
@@ -107,6 +110,69 @@ static void TestCollisionResolution()
     Check(Collision.Separate(a, b) == new Vector2(-2, 0), "Boxes should separate along the smallest overlap axis.");
     Check(Collision.Overlaps(new CircleCollider(new Vector2(0, 0), 2), new CircleCollider(new Vector2(4, 0), 2)),
         "Touching circles should register collision.");
+}
+
+static void TestPhysicsQueries()
+{
+    var scene = new Scene();
+    var staticSolid = new BoxCollider(new Vector2(10, 10), new Vector2(8, 8));
+    scene.Solids.Add(staticSolid);
+
+    var triggerEntity = scene.Spawn(new Vector2(14, 10), "trigger");
+    var trigger = triggerEntity.AddComponent<LifecycleCollider>();
+    trigger.Size = new Vector2(6, 6);
+    trigger.IsTrigger = true;
+
+    var colliderEntity = scene.Spawn("solid collider");
+    var collider = colliderEntity.AddComponent<LifecycleCollider>();
+    collider.Size = new Vector2(4, 4);
+    colliderEntity.Position = new Vector2(30, 10);
+    scene.Start();
+
+    var boxHits = PhysicsQueries.OverlapBox(scene, new BoxCollider(new Vector2(10, 10), new Vector2(12, 12)));
+    Check(boxHits.Count == 2 && boxHits.Any(hit => hit.Entity is null) && boxHits.Any(hit => hit.Entity == triggerEntity),
+        "Box overlap queries should include static solids and entity colliders.");
+    var filteredHits = PhysicsQueries.OverlapCircle(scene, new CircleCollider(new Vector2(10, 10), 8), includeTriggers: false);
+    Check(filteredHits.Count == 1 && filteredHits[0].Entity is null,
+        "Circle overlap queries should support excluding trigger colliders.");
+
+    Check(PhysicsQueries.Raycast(scene, new Vector2(0, 10), new Vector2(2, 0), 30, out var hit), "Raycast should hit the nearest collider.");
+    Near(hit.Distance, 6, "Raycast distance should use normalized direction and point to the nearest hit.");
+    Check(hit.Point == new Vector2(6, 10) && hit.Normal == new Vector2(-1, 0) && hit.Entity is null,
+        "Raycast should report the hit point, surface normal, and static-solid identity.");
+    Check(!PhysicsQueries.Raycast(scene, Vector2.Zero, Vector2.UnitY, 5, out _), "Raycast should miss beyond its maximum distance.");
+    Check(!PhysicsQueries.Raycast(scene, Vector2.Zero, Vector2.Zero, 30, out _), "Zero-direction raycasts should safely miss.");
+}
+
+static void TestAnimationClips()
+{
+    var first = new Sprite();
+    var second = new Sprite();
+    var animation = new AnimatedSpriteRenderer { PlayOnStart = false };
+    animation.AddClip(new AnimationClip("Run", [first, second], frameTime: 0.1f));
+    animation.AddClip(new AnimationClip("Death", [first, second], frameTime: 0.1f, loop: false));
+
+    Check(animation.Play("Run") && animation.CurrentClipName == "Run", "Named clips should start and expose their active name.");
+    animation.OnUpdate(0.1f);
+    Check(animation.CurrentFrame == 1, "Clip frame time should advance to the next sprite.");
+    animation.PlaybackSpeed = 2;
+    animation.OnUpdate(0.05f);
+    Check(animation.CurrentFrame == 0, "Playback speed should scale frame advancement and looping should wrap.");
+
+    Check(animation.Play("Death"), "A registered non-looping clip should play.");
+    animation.OnUpdate(0.2f);
+    Check(animation.IsFinished && animation.CurrentFrame == 1, "Non-looping clips should stop on their final frame.");
+    Check(!animation.Play("Missing"), "Playing an unknown clip should return false.");
+    Check(animation.RemoveClip("Death") && !animation.Clips.ContainsKey("Death"), "Clips should be removable by name.");
+
+    try
+    {
+        _ = new AnimationClip("Invalid", [first], 0);
+        throw new InvalidOperationException("Zero-duration clips should be rejected.");
+    }
+    catch (ArgumentOutOfRangeException)
+    {
+    }
 }
 
 static void TestEntityLifecycle()
