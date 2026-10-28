@@ -2,4 +2,6 @@
   <Project Path="src/FluxEngine.csproj" />
   <Project Path="editor/FluxEngine.Editor.csproj" />
   <Project Path="demos/FluxEngine.Demo/FluxEngine.Demo.csproj" />
+  <Project Path="tests/FluxEngine.GamepadTest/FluxEngine.GamepadTest.csproj" />
+  <Project Path="tests/FluxEngine.RegressionTests/FluxEngine.RegressionTests.csproj" />
 </Solution>

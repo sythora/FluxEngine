@@ -31,16 +31,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: |
-          dotnet restore FluxEngine.slnx
-          dotnet restore tests/FluxEngine.GamepadTest/FluxEngine.GamepadTest.csproj
-          dotnet restore tests/FluxEngine.RegressionTests/FluxEngine.RegressionTests.csproj
+        run: dotnet restore FluxEngine.slnx
 
       - name: Build
-        run: |
-          dotnet build FluxEngine.slnx --configuration Release --no-restore
-          dotnet build tests/FluxEngine.GamepadTest/FluxEngine.GamepadTest.csproj --configuration Release --no-restore
-          dotnet build tests/FluxEngine.RegressionTests/FluxEngine.RegressionTests.csproj --configuration Release --no-restore
+        run: dotnet build FluxEngine.slnx --configuration Release --no-restore
 
       - name: Run regression tests
         run: dotnet run --project tests/FluxEngine.RegressionTests/FluxEngine.RegressionTests.csproj --configuration Release --no-build

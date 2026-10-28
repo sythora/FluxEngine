@@ -25,17 +25,33 @@ then world coords are just screen coords.
 
 ## Sprites and textures
 
-Load a BMP (that's all SDL core gives us without extra libraries):
+PNG, JPEG, and BMP all load through the same call. PNG and JPEG go through
+StbImageSharp; BMP uses SDL's native loader. All three keep alpha:
 
 ```csharp
-var texture = engine.Renderer.LoadTexture("art/player.bmp");
+var texture = engine.Renderer.LoadTexture("art/player.png");
 var sprite = new Sprite(texture);
 ```
 
 Or through the asset cache so you don't load the same file twice:
 
 ```csharp
-var texture = engine.Assets.LoadTexture(engine.Renderer, "art/player.bmp");
+var texture = engine.Assets.LoadTexture(engine.Renderer, "art/player.png");
+```
+
+You can also build textures from memory or raw pixels, which is how generated
+art and embedded font atlases are loaded:
+
+```csharp
+var texture = engine.Renderer.LoadTextureFromMemory(pngBytes, "player.png");
+var texture = engine.Renderer.CreateTextureFromPixels(rgba, width, height);
+```
+
+`SaveScreenshot` reads the framebuffer and writes a PNG with the built-in
+`PngWriter`, so no native image library is required:
+
+```csharp
+engine.Renderer.SaveScreenshot("screenshot.png");
 ```
 
 Then draw it with a `SpriteRenderer` component:

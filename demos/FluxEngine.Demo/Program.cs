@@ -1,4 +1,5 @@
 using FluxEngine.Audio;
+using FluxEngine.Content;
 using FluxEngine.Core;
 using FluxEngine.Graphics;
 using FluxEngine.Input;
@@ -8,16 +9,22 @@ using FluxEngine.Physics;
 const int viewWidth = 960;
 const int viewHeight = 720;
 
+var screenshotPath = GetOption(args, "--screenshot");
+var screenshotFrame = GetIntOption(args, "--frame", 90);
+var inMenu = HasFlag(args, "--menu");
+var renderedFrames = 0;
+var screenshotTaken = false;
+
 using var engine = new Engine("FluxRunner - Infinite Platformer", viewWidth, viewHeight);
 
 // ---------------------------------------------------------------------------
-// Generate textures (BMP only, since SDL core has no PNG decoder)
+// Generate textures (PNG with alpha, decoded by the engine)
 // ---------------------------------------------------------------------------
-var playerIdle = BmpGenerator.PlayerIdle();
-var playerRun0 = BmpGenerator.PlayerRun0();
-var playerRun1 = BmpGenerator.PlayerRun1();
-var playerJump = BmpGenerator.PlayerJump();
-var coinFrames = Enumerable.Range(0, 4).Select(i => BmpGenerator.Coin(i)).ToArray();
+var playerIdle = TextureGenerator.PlayerIdle();
+var playerRun0 = TextureGenerator.PlayerRun0();
+var playerRun1 = TextureGenerator.PlayerRun1();
+var playerJump = TextureGenerator.PlayerJump();
+var coinFrames = Enumerable.Range(0, 4).Select(i => TextureGenerator.Coin(i)).ToArray();
 
 // ---------------------------------------------------------------------------
 // Load audio (missing files are skipped gracefully)
@@ -67,9 +74,11 @@ var generatorEnt = scene.Spawn("generator");
 var generator = new PlatformGenerator(playerCtrl, Rng.Shared, viewWidth);
 generatorEnt.AddComponent(generator);
 
-var uiEnt = scene.Spawn("ui");
-var ui = new GameUI(engine.Input.Actions);
-uiEnt.AddComponent(ui);
+// The HUD is drawn after the scene in screen space, not as a scene entity, so
+// its camera-free drawing cannot affect world rendering.
+var hudFont = BuiltInFonts.Load(engine.Renderer, BuiltInFont.PressStart2P);
+var smallFont = BuiltInFonts.Load(engine.Renderer, BuiltInFont.Silkscreen);
+var ui = new GameUI(engine.Input.Actions, hudFont);
 
 var bgEnt = scene.Spawn("background");
 var bg = bgEnt.AddComponent<ParallaxBackground>();
@@ -157,6 +166,13 @@ void RestartGame()
 // Start all components' OnStart callbacks
 scene.Start();
 
+// Screenshot mode jumps straight into a run so README/CI images have gameplay
+if (screenshotPath is not null && !inMenu)
+{
+    state = 1;
+    ui.StartGame();
+}
+
 // ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
@@ -166,6 +182,12 @@ const float fixedStep = 1f / 60f;
 engine.Run(
     update: deltaTime =>
     {
+        if (screenshotTaken)
+        {
+            engine.Window.Close();
+            return;
+        }
+
         // --- Input handling that works in all states ---
         if (actions.WasPressed("debug.toggle"))
             debugOverlay.Enabled = !debugOverlay.Enabled;
@@ -299,27 +321,56 @@ engine.Run(
         scene.Draw(engine.Renderer);
         ui.OnDraw(engine.Renderer);
         debugOverlay.Draw(engine.Renderer, scene, Time.UnscaledDeltaTime);
-        DrawGamepadStatus(engine.Renderer, engine.Input.FirstGamepad);
+
+        if (screenshotPath is null)
+            DrawGamepadStatus(engine.Renderer, smallFont, engine.Input.FirstGamepad);
+
+        if (screenshotPath is not null && !screenshotTaken)
+        {
+            renderedFrames++;
+
+            if (renderedFrames >= screenshotFrame)
+            {
+                engine.Renderer.SaveScreenshot(screenshotPath);
+                screenshotTaken = true;
+            }
+        }
     });
 
-static void DrawGamepadStatus(Renderer renderer, GamepadDevice? gamepad)
+static void DrawGamepadStatus(Renderer renderer, BitmapFont font, GamepadDevice? gamepad)
 {
     renderer.Camera = null;
-    var font = new PixelFont(1.5f, new Color(230, 240, 255));
     renderer.DrawRectangle(new Rectangle(12, 650, 570, 52), new Color(12, 16, 24, 210));
     renderer.DrawRectangleOutline(new Rectangle(12, 650, 570, 52), new Color(80, 120, 160));
 
     if (gamepad is null)
     {
-        font.Draw(renderer, "GAMEPAD: NONE - CONNECT A CONTROLLER TO TEST", new Vector2(22, 660));
+        font.Draw(renderer, "GAMEPAD: NONE - CONNECT A CONTROLLER TO TEST", new Vector2(22, 662), new Color(230, 240, 255), 1.1f);
         return;
     }
 
     var name = gamepad.Name.ToUpperInvariant();
-    if (name.Length > 50)
-        name = name[..50];
-    font.Draw(renderer, $"GAMEPAD {gamepad.InstanceId}: {name}", new Vector2(22, 658));
+    if (name.Length > 36)
+        name = name[..36];
+    font.Draw(renderer, $"GAMEPAD {gamepad.InstanceId}: {name}", new Vector2(22, 658), new Color(230, 240, 255), 1.1f);
     font.Draw(renderer,
         $"STICK X {gamepad.GetAxis(GamepadAxis.LeftX):0.00}  A {(gamepad.IsButtonDown(GamepadButton.A) ? "DOWN" : "UP")}  B {(gamepad.IsButtonDown(GamepadButton.B) ? "DOWN" : "UP")}",
-        new Vector2(22, 680));
+        new Vector2(22, 676), new Color(230, 240, 255), 1.1f);
 }
+
+static string? GetOption(string[] arguments, string name)
+{
+    for (var i = 0; i < arguments.Length - 1; i++)
+    {
+        if (arguments[i] == name)
+            return arguments[i + 1];
+    }
+
+    return null;
+}
+
+static int GetIntOption(string[] arguments, string name, int fallback)
+    => int.TryParse(GetOption(arguments, name), out var value) && value > 0 ? value : fallback;
+
+static bool HasFlag(string[] arguments, string name)
+    => Array.IndexOf(arguments, name) >= 0;

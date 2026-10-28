@@ -74,30 +74,6 @@ You can bind multiple keys, mouse buttons, gamepad buttons, and analog axes to t
 
 Bindings live on the input manager, so bind them once before `engine.Run`.
 
-## Testing
-
-Run the input test from the repo folder:
-
-```text
-python tests/input_test.py
-```
-
-The Python test builds FluxEngine, loads the built `FluxEngine.dll` with Python.NET, and calls the actual `InputManager` methods from Python. It does not copy the input logic into a fake Python version or start another test program. It checks key and mouse press/release states, frame clearing, mouse delta and scroll accumulation, and focus reset.
-
-You can also pick the build config:
-
-```text
-python tests/input_test.py --configuration Release
-```
-
-You need Python, the .NET SDK/runtime, and Python.NET. Install Python.NET with:
-
-```text
-python -m pip install pythonnet
-```
-
-`ctypes` cannot call a regular managed .NET DLL directly; Python.NET hosts .NET and lets Python call the managed types.
-
 ## Gamepads
 
 SDL's game-controller API identifies standard Xbox-, PlayStation-, and Switch-style controllers when SDL has a mapping for them; device names, mappings, and joystick GUID vendor IDs are used for family detection. The window opens supported controllers at startup and on hot-plug, exposes each device's SDL name, type, and instance ID, and closes disconnected devices. Controller buttons use the standard `GamepadButton` layout; sticks and triggers are available as `GamepadAxis` values. Extended SDL controller buttons are represented by `Misc1`-`Misc5` and `Touchpad` when the SDL runtime and device mapping emit them (commonly PlayStation Create/share, mute, paddles, and touchpad click). `Window.PlayControllerRumble` requests haptic rumble when SDL exposes a compatible device. SDL2 GameController has no API for routing audio to a controller's built-in speaker, so speaker-output tests must be described as host/PC audio tests. On window focus loss, active controller states are cleared to prevent stuck movement.

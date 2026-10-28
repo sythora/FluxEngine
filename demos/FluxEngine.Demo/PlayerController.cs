@@ -184,7 +184,7 @@ public sealed class PlayerController : Component
     private Sprite LoadSprite(string name)
     {
         var engine = Engine.Current!;
-        var texture = engine.Assets.LoadTexture(engine.Renderer, $"assets/{name}.bmp");
+        var texture = engine.Assets.LoadTexture(engine.Renderer, $"assets/{name}.png");
         return new Sprite(texture);
     }
 }

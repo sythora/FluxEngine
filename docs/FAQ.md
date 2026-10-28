@@ -8,13 +8,13 @@ the exe or add its folder to PATH. On Windows the build output goes to
 
 ## I want PNG images
 
-SDL core doesn't do PNG, only BMP. You can convert your art to BMP or add
-SDL_image yourself. It's annoying as hell but that's how it is.
+Use them. `Renderer.LoadTexture` decodes PNG and JPEG with StbImageSharp, and
+BMP still works through SDL. See [Graphics.md](Graphics.md).
 
 ## Can I use this for a real game?
 
-Sure, it's just missing text, PNGs, sound mixing, and a bunch of other stuff.
-Add what you need.
+Sure. It has PNG textures, bitmap fonts, a WAV mixer, physics, and an editor.
+Add whatever else your game needs.
 
 ## Why is it called FluxEngine
 

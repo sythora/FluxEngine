@@ -21,10 +21,12 @@ src/
     MathUtil.cs             Clamp, lerp, remap, smoothing and friends
     Rng.cs                  Random numbers with game friendly helpers
   FluxEngine.Graphics/
-    Renderer.cs             SDL draw calls: shapes, sprites, textures
+    Renderer.cs             SDL draw calls: shapes, sprites, textures, screenshots
     Sprite.cs               Texture plus an optional source frame
     SpriteRenderer.cs       Component that draws a sprite or a colored box
     Texture.cs              Wraps an SDL texture, owns the dispose
+    PngWriter.cs            Dependency-free 8-bit RGBA PNG encoder
+    BitmapFont.cs           Atlas-backed text drawing and measuring
     Camera.cs               Position, zoom and screen shake
   FluxEngine.Platform/
     Window.cs               SDL window, renderer, events, fullscreen
@@ -43,9 +45,14 @@ src/
     Sound.cs                Decoded audio data
   FluxEngine.Content/
     AssetManager.cs         Texture cache by full path
+    BmFont.cs               BMFont .fnt text-map parser and loader
+    BuiltInFonts.cs         Embedded OFL font atlases and maps
+    Fonts/                  Press Start 2P, Silkscreen, and OFL license texts
 demos/
-  FluxEngine.Demo/          Sandbox demo: player, balls, physics, camera shake
-tests/                      Automated tests
+  FluxEngine.Demo/          FluxRunner infinite platformer demo
+tests/
+  FluxEngine.RegressionTests/  Automated engine regression suite
+  FluxEngine.GamepadTest/      Interactive controller test
 docs/                       Project documentation
 build/                      Build output, all projects: build/<project>/, tests: build/test/<project>/
 ```

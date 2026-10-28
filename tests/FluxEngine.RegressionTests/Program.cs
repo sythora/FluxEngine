@@ -1,8 +1,10 @@
 using System.Text.Json;
+using FluxEngine.Content;
 using FluxEngine.Core;
 using FluxEngine.Graphics;
 using FluxEngine.Mathematics;
 using FluxEngine.Physics;
+using StbImageSharp;
 
 static void Check(bool condition, string message)
 {
@@ -76,6 +78,8 @@ TestEntityLifecycle();
 TestGameTimer();
 TestLevelLoader();
 TestGameManager();
+TestPngRoundTrip();
+TestBuiltInFontMaps();
 Console.WriteLine("FluxEngine regression tests passed.");
 
 static List<EditableObject> SceneObjectsFromFile(SceneFile scene)
@@ -295,6 +299,41 @@ static void TestGameManager()
 }
 
 static string TempPath(string extension) => Path.Combine(Path.GetTempPath(), $"fluxengine-{Guid.NewGuid():N}{extension}");
+
+static void TestPngRoundTrip()
+{
+    var pixels = new byte[]
+    {
+        255, 0, 0, 255,
+        0, 255, 0, 128,
+        0, 0, 255, 64,
+        10, 20, 30, 0,
+    };
+
+    using var memory = new MemoryStream();
+    PngWriter.Write(memory, 2, 2, pixels);
+    var png = memory.ToArray();
+    var decoded = ImageResult.FromMemory(png, ColorComponents.RedGreenBlueAlpha);
+
+    Check(decoded.Width == 2 && decoded.Height == 2, "PNG dimensions should survive a round trip.");
+    Check(decoded.Data.SequenceEqual(pixels), "The PNG writer should preserve RGBA pixels and alpha exactly.");
+}
+
+static void TestBuiltInFontMaps()
+{
+    var press = BmFont.Parse(BuiltInFonts.ReadFontMap(BuiltInFont.PressStart2P));
+    Check(press.Name == "Press Start 2P" && press.Glyphs.Count == 95, "Press Start 2P should expose the full printable ASCII map.");
+    Check(press.LineHeight == 8, "Press Start 2P should use its 8px line height.");
+    Check(press.Glyphs['A'].Source.Width == 8 && press.Glyphs['A'].Source.Height == 8 && press.Glyphs['A'].Advance == 8,
+        "Press Start 2P should be a monospaced 8x8 font.");
+
+    var silk = BmFont.Parse(BuiltInFonts.ReadFontMap(BuiltInFont.Silkscreen));
+    Check(silk.Name == "Silkscreen" && silk.Glyphs.Count == 95, "Silkscreen should expose the full printable ASCII map.");
+    Check(silk.Glyphs['A'].Advance == 6 && silk.Glyphs[' '].Advance == 4,
+        "Silkscreen should keep its variable width advances.");
+    Check(silk.Glyphs.Values.All(glyph => glyph.Source.Width > 0 && glyph.Source.Height > 0),
+        "Every built-in glyph should have a valid atlas rectangle.");
+}
 
 sealed class LifecycleProbe : Component
 {

@@ -1,93 +1,58 @@
 using System.IO;
+using FluxEngine.Graphics;
 using FluxEngine.Mathematics;
 
-// Generates BMP texture files at runtime. SDL core only loads BMP, so we
-// create pixel-art textures procedurally instead of relying on external art
-// files that may not exist on the user's machine.
-public static class BmpGenerator
+// Generates PNG texture files at runtime. Keeping the demo self contained
+// means there are no external art files to hunt down before pressing run.
+public static class TextureGenerator
 {
     private static readonly string AssetsDir = Path.Combine(
         Directory.GetCurrentDirectory(), "assets");
 
-    static BmpGenerator()
+    static TextureGenerator()
     {
         Directory.CreateDirectory(AssetsDir);
     }
 
     public static string PlayerIdle()
-        => Write("player_idle.bmp", 16, 28, PlayerIdlePixels);
+        => Write("player_idle.png", 16, 28, PlayerIdlePixels);
 
     public static string PlayerRun0()
-        => Write("player_run_0.bmp", 16, 28, PlayerRun0Pixels);
+        => Write("player_run_0.png", 16, 28, PlayerRun0Pixels);
 
     public static string PlayerRun1()
-        => Write("player_run_1.bmp", 16, 28, PlayerRun1Pixels);
+        => Write("player_run_1.png", 16, 28, PlayerRun1Pixels);
 
     public static string PlayerJump()
-        => Write("player_jump.bmp", 16, 28, PlayerJumpPixels);
+        => Write("player_jump.png", 16, 28, PlayerJumpPixels);
 
     public static string Platform(int width, int height)
-        => Write($"platform_{width}x{height}.bmp", width, height,
+        => Write($"platform_{width}x{height}.png", width, height,
             (x, y) => PlatformPixels(x, y, width, height));
 
     public static string Coin(int frame)
-        => Write($"coin_{frame}.bmp", 8, 8, (x, y) => CoinPixels(x, y, frame));
+        => Write($"coin_{frame}.png", 8, 8, (x, y) => CoinPixels(x, y, frame));
 
     private static string Write(string name, int width, int height,
         Func<int, int, Color> pixel)
     {
         var path = Path.Combine(AssetsDir, name);
+        var rgba = new byte[width * height * 4];
 
-        // BITMAPV4HEADER (108 bytes) + BMP file header (14 bytes) = 122 bytes
-        const int fileHeaderSize = 14;
-        const int infoHeaderSize = 108;
-        var imageSize = width * height * 4;
-        var fileSize = fileHeaderSize + infoHeaderSize + imageSize;
-
-        using var fs = File.Create(path);
-        using var writer = new BinaryWriter(fs);
-
-        // BMP file header
-        writer.Write((byte)'B');
-        writer.Write((byte)'M');
-        writer.Write(fileSize);
-        writer.Write((short)0);
-        writer.Write((short)0);
-        writer.Write(fileHeaderSize + infoHeaderSize); // 122
-
-        // BITMAPV4HEADER with BI_BITFIELDS and alpha channel
-        writer.Write(infoHeaderSize);
-        writer.Write(width);
-        writer.Write(height);
-        writer.Write((short)1);  // planes
-        writer.Write((short)32); // 32 bpp
-        writer.Write(3);         // BI_BITFIELDS
-        writer.Write(imageSize);
-        writer.Write(0);
-        writer.Write(0);
-        writer.Write(0);
-        writer.Write(0);
-        writer.Write(0x00FF0000);                // Red mask
-        writer.Write(0x0000FF00);                // Green mask
-        writer.Write(0x000000FF);                // Blue mask
-        writer.Write(unchecked((int)0xFF000000)); // Alpha mask
-        writer.Write(0x73524742);                // CSType: 'sRGB'
-        for (var i = 0; i < 12; i++)
-            writer.Write(0);                     // Endpoints and gamma
-
-        // Pixel data, bottom-up
-        for (var y = height - 1; y >= 0; y--)
+        for (var y = 0; y < height; y++)
         {
             for (var x = 0; x < width; x++)
             {
-                var c = pixel(x, y);
-                writer.Write(c.B);
-                writer.Write(c.G);
-                writer.Write(c.R);
-                writer.Write(c.A);
+                var color = pixel(x, y);
+                var index = (y * width + x) * 4;
+                rgba[index] = color.R;
+                rgba[index + 1] = color.G;
+                rgba[index + 2] = color.B;
+                rgba[index + 3] = color.A;
             }
         }
 
+        PngWriter.Write(path, width, height, rgba);
         return path;
     }
 

@@ -15,15 +15,20 @@
     <Compile Remove="FluxEngine.Editor/**" />
   </ItemGroup>
 
+  <!-- built-in bitmap fonts: BMFont text map + PNG atlas -->
   <ItemGroup>
-    <PackageReference Include="SDL2-CS" Version="2.0.0" GeneratePathProperty="true" />
+    <EmbeddedResource Include="FluxEngine.Content\Fonts\*.fnt" />
+    <EmbeddedResource Include="FluxEngine.Content\Fonts\*.png" />
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="$(NuGetPackageRoot)sdl2-cs\2.0.0\content\net20\SDL2-CS\SDL2.cs"
-             Link="SDL2\SDL2.cs" />
-    <Compile Include="$(NuGetPackageRoot)sdl2-cs\2.0.0\content\net20\SDL2-CS\LPUtf8StrMarshaler.cs"
-             Link="SDL2\LPUtf8StrMarshaler.cs" />
+    <PackageReference Include="SDL2-CS" Version="2.0.0" GeneratePathProperty="true" />
+    <PackageReference Include="StbImageSharp" Version="2.30.16" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="$(NuGetPackageRoot)sdl2-cs\2.0.0\content\net20\SDL2-CS\SDL2.cs" Link="SDL2\SDL2.cs" />
+    <Compile Include="$(NuGetPackageRoot)sdl2-cs\2.0.0\content\net20\SDL2-CS\LPUtf8StrMarshaler.cs" Link="SDL2\LPUtf8StrMarshaler.cs" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -7,7 +7,9 @@ This roadmap turns the proposed feature list into an incremental plan for FluxEn
 - [x] Make the scene editor serialize its current editable objects on Save, Save As, and close, rather than stale data loaded before edits.
 - [x] Add grounded jump, one mid-air jump, coyote grace, buffered jump presses, and variable jump height to FluxRunner.
 - [x] Generate collectible coins and spike hazards in the demo; update score, distance, time, and best-distance HUD data.
-- [x] Add regression tests for scene edit/save/reopen consistency, collision queries, entity/component lifecycle, timers, level loading, and game-manager behavior. Keep the existing input regression test.
+- [x] Add regression tests for scene edit/save/reopen consistency, collision queries, entity/component lifecycle, timers, level loading, and game-manager behavior.
+- [x] Replace the Python input test with the C# regression suite and include both test projects in the solution.
+- [x] Add PNG/JPEG loading with alpha, screenshot PNG output, built-in OFL bitmap fonts, and BMFont text-map loading.
 - [ ] Verify gameplay in a running demo, including every advertised control and collectible/hazard behavior.
 
 ## Phase 1 - Reliable content and level foundations
@@ -16,7 +18,7 @@ This roadmap turns the proposed feature list into an incremental plan for FluxEn
    - Extend the dependency-free regression test project to cover collisions, scene serialization round trips, entity/component start and destruction, timers, level loading, and game manager behavior.
    - Fix lifecycle/resource ownership issues discovered by the tests; avoid accumulating stale colliders or native resources.
 2. **Image and asset pipeline**
-   - Add PNG loading with alpha using a decoder compatible with this SDL2 backend; evaluate QOI/TGA only if they add meaningful value.
+   - PNG/JPEG loading with alpha and PNG screenshot output are in place. Next: evaluate QOI/TGA only if they add meaningful value.
    - Add named asset references, preloading/validation, useful missing-asset errors, predictable texture disposal, and optional source-change hot reload.
 3. **Tiled JSON tilemaps**
    - Import Tiled JSON maps rather than first building a large custom tile editor.
@@ -68,4 +70,4 @@ This roadmap turns the proposed feature list into an incremental plan for FluxEn
 
 ## Status notes
 
-FluxRunner's current demo has gained double jump, coyote grace, buffered/variable-height jumps, generated coin and hazard entities, and connected HUD values. The scene editor captures live edits into its serialized scene when saving, with regression coverage for scene save/reopen/save and core systems. Runtime gameplay verification remains. The editor is still Windows Forms; the roadmap describes its eventual cross-platform replacement, but that migration has not started.
+FluxRunner's current demo has gained double jump, coyote grace, buffered/variable-height jumps, generated coin and hazard entities, and connected HUD values. It now loads PNG textures generated at runtime and renders its HUD with the embedded Press Start 2P and Silkscreen fonts. The scene editor captures live edits into its serialized scene when saving, with regression coverage for scene save/reopen/save and core systems. Runtime gameplay verification remains. The editor is still Windows Forms; the roadmap describes its eventual cross-platform replacement, but that migration has not started.

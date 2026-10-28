@@ -27,7 +27,7 @@ public sealed class Coin : Component
         var engine = Engine.Current!;
         for (var i = 0; i < 4; i++)
         {
-            var texture = engine.Assets.LoadTexture(engine.Renderer, $"assets/coin_{i}.bmp");
+            var texture = engine.Assets.LoadTexture(engine.Renderer, $"assets/coin_{i}.png");
             _anim.Frames.Add(new Sprite(texture));
         }
 
