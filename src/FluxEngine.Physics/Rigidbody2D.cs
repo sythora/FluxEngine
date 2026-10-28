@@ -115,12 +115,11 @@ public sealed class Rigidbody2D : Component
                 if (Velocity.Y <= 0)
                     continue;
 
-                // already below the platform? ignore (jumping up through it)
-                if (playerBottom > platformTop)
-                    continue;
-
-                // not close enough to the top? ignore
-                if (MathF.Abs(playerBottom - platformTop) > oneWay.SnapThreshold)
+                // The body has already advanced this frame, so allow a small
+                // amount of downward penetration before snapping it to the top.
+                // Without this tolerance, normal frame steps can cross the top
+                // by a few pixels and fall through one-way platforms.
+                if (playerBottom - platformTop > oneWay.SnapThreshold)
                     continue;
             }
 

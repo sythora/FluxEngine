@@ -4,7 +4,7 @@ This is the inputs part of FluxEngine. It is made to keep game code away from ra
 
 ## InputManager
 
-`InputManager` tracks keyboard state, mouse state, scrolling, mouse position, focus, and inside-window status.
+`InputManager` tracks keyboard state, mouse state, scrolling, mouse position, focus, inside-window status, and connected SDL game controllers. It reports connected controller names and instance IDs through `Gamepads`, `FirstGamepad`, and `GetGamepad(instanceId)`.
 
 It keeps a few different kinds of state:
 
@@ -70,9 +70,7 @@ if (actions.WasPressed("jump"))
 var move = actions.Axis("move.left", "move.right"); // -1, 0 or 1
 ```
 
-You can bind more than one key to the same action. `IsDown` checks held keys
-and mouse buttons, `WasPressed` and `WasReleased` only fire on the frame the
-thing changed. `Unbind(name)` removes one action, `Clear()` removes all.
+You can bind multiple keys, mouse buttons, gamepad buttons, and analog axes to the same action. Gamepad axes are normalized to `-1..1` and can be bound with a direction and deadzone. `IsDown` checks all bound inputs, `WasPressed` and `WasReleased` track button edges, and `Axis` preserves analog stick strength. `Unbind(name)` removes one action, `Clear()` removes all.
 
 Bindings live on the input manager, so bind them once before `engine.Run`.
 
@@ -99,6 +97,18 @@ python -m pip install pythonnet
 ```
 
 `ctypes` cannot call a regular managed .NET DLL directly; Python.NET hosts .NET and lets Python call the managed types.
+
+## Gamepads
+
+SDL's game-controller API identifies standard Xbox-, PlayStation-, and Switch-style controllers when SDL has a mapping for them; device names, mappings, and joystick GUID vendor IDs are used for family detection. The window opens supported controllers at startup and on hot-plug, exposes each device's SDL name, type, and instance ID, and closes disconnected devices. Controller buttons use the standard `GamepadButton` layout; sticks and triggers are available as `GamepadAxis` values. Extended SDL controller buttons are represented by `Misc1`-`Misc5` and `Touchpad` when the SDL runtime and device mapping emit them (commonly PlayStation Create/share, mute, paddles, and touchpad click). `Window.PlayControllerRumble` requests haptic rumble when SDL exposes a compatible device. SDL2 GameController has no API for routing audio to a controller's built-in speaker, so speaker-output tests must be described as host/PC audio tests. On window focus loss, active controller states are cleared to prevent stuck movement.
+
+```csharp
+actions.BindGamepadButton("jump", GamepadButton.A);
+actions.BindGamepadAxis("move.left", GamepadAxis.LeftX, direction: -1, deadzone: 0.2f);
+actions.BindGamepadAxis("move.right", GamepadAxis.LeftX, deadzone: 0.2f);
+
+var controllerName = engine.Input.FirstGamepad?.Name ?? "No controller";
+```
 
 ## SDL platform side
 

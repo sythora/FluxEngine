@@ -8,5 +8,5 @@ namespace FluxEngine.Physics;
 public sealed class OneWayPlatform : ColliderComponent
 {
     // how far above the platform the player has to be to count as landing
-    public float SnapThreshold = 8f;
+    public float SnapThreshold = 28f;
 }

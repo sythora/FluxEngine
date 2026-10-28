@@ -12,7 +12,6 @@ public sealed class PlayerController : Component
     private readonly InputActions _actions;
     private readonly ParticleEmitter _particles;
 
-    private SpriteRenderer _sprite = null!;
     private AnimatedSpriteRenderer _anim = null!;
     private Rigidbody2D _body = null!;
 
@@ -44,11 +43,6 @@ public sealed class PlayerController : Component
 
     public override void OnStart()
     {
-        _sprite = Entity.AddComponent<SpriteRenderer>();
-        _sprite.Size = new Vector2(22, 32);
-        _sprite.Color = Color.White;
-        _sprite.Layer = 10;
-
         _anim = Entity.AddComponent<AnimatedSpriteRenderer>();
         _anim.Color = Color.White;
         _anim.Layer = 10;
@@ -58,13 +52,12 @@ public sealed class PlayerController : Component
         _anim.AddClip(new AnimationClip("Jump", [LoadSprite("player_jump")], 0.1f));
         _anim.AddClip(new AnimationClip("Fall", [LoadSprite("player_jump")], 0.1f));
         _anim.Play("Idle");
-        _sprite.Color = Color.Transparent;
 
         _body = Entity.AddComponent<Rigidbody2D>();
         _body.Size = new Vector2(16, 28);
         _body.Gravity = new Vector2(0, 1600);
-        _body.Drag = 4f;
-        _body.Bounciness = 0.05f;
+        _body.Drag = 0f;
+        _body.Bounciness = 0.0f;
         _body.MaxFallSpeed = _maxFallSpeed;
     }
 
@@ -77,15 +70,20 @@ public sealed class PlayerController : Component
         else
             _jumpBufferTimer = MathF.Max(0, _jumpBufferTimer - deltaTime);
 
-        // Horizontal movement with acceleration/deceleration
+        // Horizontal movement with responsive acceleration and crisp turning
         var targetVelX = inputX * _moveSpeed;
-        var accel = inputX != 0 ? 1800f : 1200f;
         var velX = _body.Velocity.X;
-
+        float accel;
         if (inputX != 0)
+        {
+            accel = (MathF.Sign(velX) != 0 && MathF.Sign(velX) != MathF.Sign(targetVelX)) ? 4500f : 2400f;
             velX = MathUtil.MoveTowards(velX, targetVelX, accel * deltaTime);
+        }
         else
+        {
+            accel = 2400f;
             velX = MathUtil.MoveTowards(velX, 0, accel * deltaTime);
+        }
 
         _body.Velocity = new Vector2(velX, _body.Velocity.Y);
 
@@ -159,7 +157,7 @@ public sealed class PlayerController : Component
         // Flip the active clip consistently when changing animation states.
         foreach (var frame in _anim.Frames)
             frame.FlipX = !_facingRight;
-        _anim.Entity.Scale = new Vector2(_facingRight ? 1 : -1, 1);
+        _anim.Entity.Scale = Vector2.One;
 
         // Dust puffs when running on ground
         if (grounded && absVelX > 60f)

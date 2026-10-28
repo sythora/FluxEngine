@@ -16,6 +16,7 @@ public sealed class InputManager
     private readonly HashSet<MouseButton> _heldButtons = [];
     private readonly HashSet<MouseButton> _pressedButtons = [];
     private readonly HashSet<MouseButton> _releasedButtons = [];
+    private readonly Dictionary<int, GamepadDevice> _gamepads = [];
 
     private bool _hasMousePosition;
 
@@ -37,6 +38,12 @@ public sealed class InputManager
     public bool AnyMouseButtonDown => _heldButtons.Count > 0;
     public bool AnyMouseButtonPressed => _pressedButtons.Count > 0;
 
+    public IReadOnlyCollection<GamepadDevice> Gamepads => _gamepads.Values;
+    public GamepadDevice? FirstGamepad => _gamepads.Values.FirstOrDefault();
+
+    public GamepadDevice? GetGamepad(int instanceId)
+        => _gamepads.GetValueOrDefault(instanceId);
+
     public bool IsKeyDown(Key key) => _heldKeys.Contains(key);
     public bool WasKeyPressed(Key key) => _pressedKeys.Contains(key);
     public bool WasKeyReleased(Key key) => _releasedKeys.Contains(key);
@@ -57,6 +64,8 @@ public sealed class InputManager
         _releasedKeys.Clear();
         _pressedButtons.Clear();
         _releasedButtons.Clear();
+        foreach (var gamepad in _gamepads.Values)
+            gamepad.BeginFrame();
 
         MouseDeltaX = 0;
         MouseDeltaY = 0;
@@ -91,6 +100,35 @@ public sealed class InputManager
         {
             _releasedButtons.Add(button);
         }
+    }
+
+    public GamepadDevice ConnectGamepad(int instanceId, string name, GamepadType type = GamepadType.Unknown, string mapping = "")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        if (_gamepads.TryGetValue(instanceId, out var existing))
+        {
+            existing.UpdateMetadata(name, type, mapping);
+            return existing;
+        }
+
+        var gamepad = new GamepadDevice(instanceId, name, type, mapping);
+        _gamepads.Add(instanceId, gamepad);
+        return gamepad;
+    }
+
+    public bool DisconnectGamepad(int instanceId)
+        => _gamepads.Remove(instanceId);
+
+    public void SetGamepadButton(int instanceId, GamepadButton button, bool isDown)
+    {
+        if (_gamepads.TryGetValue(instanceId, out var gamepad))
+            gamepad.SetButton(button, isDown);
+    }
+
+    public void SetGamepadAxis(int instanceId, GamepadAxis axis, float value)
+    {
+        if (_gamepads.TryGetValue(instanceId, out var gamepad))
+            gamepad.SetAxis(axis, value);
     }
 
     public void SetMousePosition(int x, int y)
@@ -135,6 +173,8 @@ public sealed class InputManager
         _heldButtons.Clear();
         _pressedButtons.Clear();
         _releasedButtons.Clear();
+        foreach (var gamepad in _gamepads.Values)
+            gamepad.Reset();
 
         MouseDeltaX = 0;
         MouseDeltaY = 0;

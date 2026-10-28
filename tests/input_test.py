@@ -142,8 +142,8 @@ def main():
     run_build(args.configuration)
     dll = (
         ROOT
-        / "artifacts"
-        / "bin"
+        / "build"
+        / "FluxEngine"
         / args.configuration
         / "net10.0"
         / "FluxEngine.dll"

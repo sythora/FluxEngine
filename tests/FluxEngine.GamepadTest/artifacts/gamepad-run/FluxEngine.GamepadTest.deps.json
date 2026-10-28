@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "FluxEngine.GamepadTest/1.0.0": {
+        "dependencies": {
+          "FluxEngine": "1.0.0"
+        },
+        "runtime": {
+          "FluxEngine.GamepadTest.dll": {}
+        }
+      },
+      "FluxEngine/1.0.0": {
+        "runtime": {
+          "FluxEngine.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "FluxEngine.GamepadTest/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "FluxEngine/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

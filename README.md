@@ -1,5 +1,7 @@
 # FluxEngine - Infinite Platformer Demo
 
+[![Build](https://github.com/sythora/FluxEngine/actions/workflows/build.yml/badge.svg)](https://github.com/sythora/FluxEngine/actions/workflows/build.yml)
+
 A 2D infinite-scrolling platformer built with FluxEngine, a C# game engine on top of SDL2.
 
 ## Build
@@ -14,7 +16,7 @@ dotnet build FluxEngine.slnx
 dotnet run --project demos/FluxEngine.Demo
 ```
 
-Requires `SDL2.dll` next to the exe at `artifacts/bin/Debug/net10.0/SDL2.dll`.
+Requires `SDL2.dll` next to the exe at `build/FluxEngine.Demo/Debug/net10.0/SDL2.dll`.
 Download SDL2 from https://www.libsdl.org/ (get `SDL2-devel-2.0.20-VC.zip`, take `x64/SDL2.dll`).
 
 ## Controls
@@ -47,6 +49,7 @@ editor/                 Standalone WinForms scene editor
 demos/FluxEngine.Demo/  Infinite platformer demo
 tests/                  Automated tests
 docs/                   Documentation
+build/                  Build output (build/<project>/, tests in build/test/<project>/)
 ```
 
 ## Architecture

@@ -14,18 +14,14 @@ public sealed class Coin : Component
 
     public override void OnStart()
     {
-        var sprite = Entity.AddComponent<SpriteRenderer>();
-        sprite.Size = new Vector2(14, 14);
-        sprite.Color = Color.Gold;
-        sprite.Layer = 8;
-
         _anim = Entity.AddComponent<AnimatedSpriteRenderer>();
-        _anim.Color = Color.Gold;
+        _anim.Color = Color.White;
         _anim.Layer = 8;
         _anim.FrameTime = 0.1f;
         _anim.Loop = true;
         _anim.PlayOnStart = true;
 
+        Entity.Scale = new Vector2(2, 2);
         _startY = Entity.Position.Y;
 
         var engine = Engine.Current!;

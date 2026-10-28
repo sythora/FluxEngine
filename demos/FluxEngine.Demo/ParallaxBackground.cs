@@ -49,14 +49,28 @@ public sealed class ParallaxBackground : Component
         var halfW = 480f;
         var halfH = 360f;
 
-        // Sky gradient bands (drawn as rectangles)
+        // Sky bands form a warm pixel-art dusk palette behind the hills.
         var skyTop = camY - halfH;
         var skyBottom = camY + halfH;
+        renderer.DrawRectangle(new Rectangle(camX - halfW, skyTop, 960, 140), new Color(24, 37, 78));
+        renderer.DrawRectangle(new Rectangle(camX - halfW, skyTop + 140, 960, 140), new Color(42, 62, 108));
+        renderer.DrawRectangle(new Rectangle(camX - halfW, skyTop + 280, 960, 120), new Color(94, 94, 142));
+        renderer.DrawRectangle(new Rectangle(camX - halfW, skyTop + 400, 960, 140), new Color(178, 113, 126));
+        renderer.DrawRectangle(new Rectangle(camX - halfW, skyTop + 540, 960, 180), new Color(230, 154, 126));
 
-        // Deep sky
-        renderer.DrawRectangle(new Rectangle(camX - halfW, skyTop, 960, 180), new Color(25, 40, 80));
-        renderer.DrawRectangle(new Rectangle(camX - halfW, skyTop + 180, 960, 180), new Color(40, 70, 120));
-        renderer.DrawRectangle(new Rectangle(camX - halfW, skyTop + 360, 960, 180), new Color(60, 100, 160));
+        // A blocky sun and tiny pixel stars add a clear horizon focal point.
+        var sun = new Vector2(camX + 300f, camY - 150f);
+        renderer.DrawCircle(sun, 58f, new Color(244, 181, 126));
+        renderer.DrawCircle(sun, 46f, new Color(255, 218, 150));
+        renderer.DrawRectangle(new Rectangle(sun.X - 46f, sun.Y + 5f, 92f, 7f), new Color(244, 181, 126));
+        renderer.DrawRectangle(new Rectangle(sun.X - 40f, sun.Y + 19f, 80f, 5f), new Color(244, 181, 126));
+        foreach (var star in new[]
+        {
+            new Vector2(camX - 380, camY - 260), new Vector2(camX - 250, camY - 190),
+            new Vector2(camX - 60, camY - 285), new Vector2(camX + 110, camY - 230),
+            new Vector2(camX + 400, camY - 275),
+        })
+            renderer.DrawRectangle(new Rectangle(star.X, star.Y, 3, 3), new Color(255, 233, 190));
 
         // Distant hills (slow parallax)
         var hillOffset = camX * 0.15f;
@@ -92,7 +106,10 @@ public sealed class ParallaxBackground : Component
             renderer.DrawCircle(new Vector2(cx - size * 0.5f, cy + size * 0.3f), size * 0.7f, new Color(200, 210, 230, 200));
         }
 
-        // Ground line at bottom of screen
-        renderer.DrawRectangle(new Rectangle(camX - halfW, camY + 220, 960, 4), new Color(100, 140, 180));
+        // Layered horizon and foreground ridge give the scene more depth.
+        renderer.DrawCircle(new Vector2(camX - 160f, camY + 250f), 135f, new Color(63, 83, 112));
+        renderer.DrawCircle(new Vector2(camX + 180f, camY + 270f), 165f, new Color(54, 75, 105));
+        renderer.DrawRectangle(new Rectangle(camX - halfW, camY + 330f, 960, 30), new Color(36, 55, 82));
+        renderer.DrawRectangle(new Rectangle(camX - halfW, camY + 220f, 960, 4), new Color(255, 194, 139));
     }
 }

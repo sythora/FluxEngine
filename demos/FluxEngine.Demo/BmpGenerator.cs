@@ -15,16 +15,16 @@ public static class BmpGenerator
     }
 
     public static string PlayerIdle()
-        => Write("player_idle.bmp", 8, 16, PlayerIdlePixels);
+        => Write("player_idle.bmp", 16, 28, PlayerIdlePixels);
 
     public static string PlayerRun0()
-        => Write("player_run_0.bmp", 8, 16, PlayerRun0Pixels);
+        => Write("player_run_0.bmp", 16, 28, PlayerRun0Pixels);
 
     public static string PlayerRun1()
-        => Write("player_run_1.bmp", 8, 16, PlayerRun1Pixels);
+        => Write("player_run_1.bmp", 16, 28, PlayerRun1Pixels);
 
     public static string PlayerJump()
-        => Write("player_jump.bmp", 8, 16, PlayerJumpPixels);
+        => Write("player_jump.bmp", 16, 28, PlayerJumpPixels);
 
     public static string Platform(int width, int height)
         => Write($"platform_{width}x{height}.bmp", width, height,
@@ -38,12 +38,11 @@ public static class BmpGenerator
     {
         var path = Path.Combine(AssetsDir, name);
 
-        if (File.Exists(path))
-            return path;
-
-        var rowSize = (width * 3 + 3) & ~3;
-        var imageSize = rowSize * height;
-        var fileSize = 54 + imageSize;
+        // BITMAPV4HEADER (108 bytes) + BMP file header (14 bytes) = 122 bytes
+        const int fileHeaderSize = 14;
+        const int infoHeaderSize = 108;
+        var imageSize = width * height * 4;
+        var fileSize = fileHeaderSize + infoHeaderSize + imageSize;
 
         using var fs = File.Create(path);
         using var writer = new BinaryWriter(fs);
@@ -54,20 +53,27 @@ public static class BmpGenerator
         writer.Write(fileSize);
         writer.Write((short)0);
         writer.Write((short)0);
-        writer.Write(54);
+        writer.Write(fileHeaderSize + infoHeaderSize); // 122
 
-        // DIB header
-        writer.Write(40);
+        // BITMAPV4HEADER with BI_BITFIELDS and alpha channel
+        writer.Write(infoHeaderSize);
         writer.Write(width);
         writer.Write(height);
-        writer.Write((short)1);
-        writer.Write((short)24);
-        writer.Write(0);
+        writer.Write((short)1);  // planes
+        writer.Write((short)32); // 32 bpp
+        writer.Write(3);         // BI_BITFIELDS
         writer.Write(imageSize);
         writer.Write(0);
         writer.Write(0);
         writer.Write(0);
         writer.Write(0);
+        writer.Write(0x00FF0000);                // Red mask
+        writer.Write(0x0000FF00);                // Green mask
+        writer.Write(0x000000FF);                // Blue mask
+        writer.Write(unchecked((int)0xFF000000)); // Alpha mask
+        writer.Write(0x73524742);                // CSType: 'sRGB'
+        for (var i = 0; i < 12; i++)
+            writer.Write(0);                     // Endpoints and gamma
 
         // Pixel data, bottom-up
         for (var y = height - 1; y >= 0; y--)
@@ -78,123 +84,223 @@ public static class BmpGenerator
                 writer.Write(c.B);
                 writer.Write(c.G);
                 writer.Write(c.R);
+                writer.Write(c.A);
             }
-
-            var pad = rowSize - width * 3;
-            for (var p = 0; p < pad; p++)
-                writer.Write((byte)0);
         }
 
         return path;
     }
 
-    // Player character: head, body, legs, arm. Pixel art.
+    // Base character structure: 16x28 pixel-art hero runner.
+    // X: 0 to 15, Y: 0 to 27
     private static Color PlayerIdlePixels(int x, int y)
     {
-        var c = Color.Transparent;
+        // Hair (rich chestnut with highlight strands)
+        if (y == 2 && x >= 5 && x <= 10) return new Color(90, 50, 30);
+        if (y == 3 && x >= 4 && x <= 12) return (x == 6 || x == 7) ? new Color(130, 80, 50) : new Color(70, 40, 25);
+        if (y == 4 && x >= 4 && x <= 12) return (x == 5 || x == 11) ? new Color(60, 35, 20) : (x == 8 ? new Color(130, 80, 50) : new Color(80, 45, 30));
+        if (y == 5 && ((x >= 3 && x <= 5) || (x >= 11 && x <= 12))) return new Color(60, 35, 20);
 
-        // Head (skin)
-        if (y >= 1 && y <= 4 && x >= 2 && x <= 5)
-            c = new Color(255, 220, 175);
-        // Hair
-        if (y == 1 && x >= 2 && x <= 5)
-            c = new Color(60, 40, 30);
-        // Eyes
-        if (y == 3 && (x == 3 || x == 4))
-            c = new Color(20, 20, 20);
-        // Body (blue shirt)
-        if (y >= 5 && y <= 10 && x >= 2 && x <= 5)
-            c = new Color(70, 130, 220);
-        // Arms
-        if (y >= 5 && y <= 7 && x == 1)
-            c = new Color(70, 130, 220);
-        if (y >= 5 && y <= 7 && x == 6)
-            c = new Color(70, 130, 220);
-        // Legs (brown pants)
-        if (y >= 11 && y <= 14)
+        // Face & Head (warm peach tone)
+        if (y >= 5 && y <= 9 && x >= 6 && x <= 11)
         {
-            if (x == 2 || x == 3)
-                c = new Color(130, 90, 50);
-            if (x == 4 || x == 5)
-                c = new Color(130, 90, 50);
-        }
-        // Feet (darker brown)
-        if (y == 15 && (x == 2 || x == 3 || x == 4 || x == 5))
-            c = new Color(90, 60, 30);
+            // Eyes with highlights
+            if (y == 7)
+            {
+                if (x == 8 || x == 10) return new Color(25, 30, 45); // pupils
+                if (x == 9 || x == 11) return new Color(255, 255, 255); // eye white
+            }
+            // Cheek blush
+            if (y == 8 && (x == 6 || x == 11)) return new Color(245, 170, 160);
+            // Mouth
+            if (y == 9 && x == 8) return new Color(200, 130, 120);
 
-        return c;
+            return new Color(255, 218, 185);
+        }
+
+        // Red hero scarf / bandana around neck
+        if (y == 10 && x >= 4 && x <= 12) return new Color(225, 35, 45);
+        if (y == 11 && x >= 5 && x <= 11) return new Color(195, 25, 35);
+        // Scarf tail trailing behind to the left
+        if (y == 11 && x >= 1 && x <= 4) return new Color(225, 35, 45);
+        if (y == 12 && x >= 0 && x <= 3) return new Color(180, 20, 30);
+
+        // Runner Jacket (vibrant blue with crisp white trim)
+        if (y >= 12 && y <= 17 && x >= 5 && x <= 11)
+        {
+            if (x == 8) return new Color(245, 245, 255); // zipper stripe
+            if (x == 5 || x == 11) return new Color(30, 75, 170); // outer shading
+            return new Color(50, 120, 230); // jacket blue
+        }
+
+        // Arms & Hands (Idle)
+        if (y >= 12 && y <= 15 && (x == 4 || x == 12)) return new Color(40, 95, 195);
+        if (y >= 16 && y <= 17 && (x == 4 || x == 12)) return new Color(255, 218, 185); // hands
+
+        // Belt
+        if (y == 18 && x >= 5 && x <= 11)
+        {
+            if (x == 8) return new Color(245, 200, 45); // gold buckle
+            return new Color(35, 35, 42); // dark leather
+        }
+
+        // Pants / Joggers (charcoal runner pants)
+        if (y >= 19 && y <= 24)
+        {
+            // Left leg
+            if (x >= 5 && x <= 7) return y == 21 ? new Color(75, 80, 95) : new Color(50, 55, 65);
+            // Right leg
+            if (x >= 9 && x <= 11) return y == 21 ? new Color(75, 80, 95) : new Color(50, 55, 65);
+        }
+
+        // Sneakers (red & white high-tops)
+        if (y >= 25 && y <= 27)
+        {
+            // Left shoe
+            if (x >= 4 && x <= 7)
+            {
+                if (y == 25) return new Color(220, 35, 45); // red upper
+                if (y == 26) return new Color(245, 245, 250); // white rubber sole
+                if (y == 27) return new Color(35, 35, 40); // dark bottom tread
+            }
+            // Right shoe
+            if (x >= 9 && x <= 12)
+            {
+                if (y == 25) return new Color(220, 35, 45);
+                if (y == 26) return new Color(245, 245, 250);
+                if (y == 27) return new Color(35, 35, 40);
+            }
+        }
+
+        return Color.Transparent;
     }
 
     private static Color PlayerRun0Pixels(int x, int y)
     {
-        var c = PlayerIdlePixels(x, y);
+        if (y <= 18)
+        {
+            // Wind-blown scarf tail
+            if (y == 10 && x >= 0 && x <= 4) return new Color(225, 35, 45);
+            if (y == 11 && x >= 0 && x <= 3) return new Color(195, 25, 35);
 
-        // Left leg forward
-        if (y >= 11 && y <= 14 && x == 1)
-            c = new Color(130, 90, 50);
-        if (y == 15 && x == 1)
-            c = new Color(90, 60, 30);
-        // Right leg back
-        if (y >= 11 && y <= 12 && x == 5)
-            c = Color.Transparent;
-        if (y == 13 && x == 5)
-            c = new Color(130, 90, 50);
-        if (y == 14 && x == 5)
-            c = new Color(130, 90, 50);
-        if (y == 15 && x == 5)
-            c = new Color(90, 60, 30);
+            // Right arm swinging forward
+            if (y >= 13 && y <= 15 && x == 13) return new Color(40, 95, 195);
+            if (y >= 16 && y <= 17 && x == 13) return new Color(255, 218, 185);
 
-        return c;
+            // Left arm swinging back
+            if (y >= 12 && y <= 14 && x == 3) return new Color(40, 95, 195);
+            if (y >= 15 && y <= 16 && x == 3) return new Color(255, 218, 185);
+
+            if (x == 4 && y >= 12 && y <= 17) return Color.Transparent;
+            if (x == 12 && y >= 12 && y <= 17) return Color.Transparent;
+
+            return PlayerIdlePixels(x, y);
+        }
+
+        // Pants / Legs in dynamic running stride:
+        // Left leg kicking forward (X: 8 to 12)
+        if (y >= 19 && y <= 24 && x >= 8 && x <= 12) return new Color(55, 60, 72);
+        // Right leg pushing backward (X: 3 to 6)
+        if (y >= 19 && y <= 23 && x >= 3 && x <= 6) return new Color(40, 45, 55);
+
+        // Shoes in running pose:
+        // Front foot forward planted
+        if (y >= 25 && y <= 27 && x >= 9 && x <= 14)
+        {
+            if (y == 25) return new Color(220, 35, 45);
+            if (y == 26) return new Color(245, 245, 250);
+            return new Color(35, 35, 40);
+        }
+        // Back foot angled up/back
+        if (y >= 22 && y <= 25 && x >= 1 && x <= 4)
+        {
+            if (y == 22 || y == 23) return new Color(220, 35, 45);
+            if (y == 24) return new Color(245, 245, 250);
+            return new Color(35, 35, 40);
+        }
+
+        return Color.Transparent;
     }
 
     private static Color PlayerRun1Pixels(int x, int y)
     {
-        var c = PlayerIdlePixels(x, y);
+        // 1px vertical bob during run step
+        if (y <= 17)
+        {
+            var baseColor = PlayerIdlePixels(x, y + 1);
+            if (y == 11 && x >= 0 && x <= 3) return new Color(225, 35, 45);
+            return baseColor;
+        }
 
-        // Right leg forward
-        if (y >= 11 && y <= 14 && x == 5)
-            c = new Color(130, 90, 50);
-        if (y == 15 && x == 5)
-            c = new Color(90, 60, 30);
-        // Left leg back
-        if (y >= 11 && y <= 12 && x == 2)
-            c = Color.Transparent;
-        if (y == 13 && x == 2)
-            c = new Color(130, 90, 50);
-        if (y == 14 && x == 2)
-            c = new Color(130, 90, 50);
-        if (y == 15 && x == 2)
-            c = new Color(90, 60, 30);
+        if (y == 18 && x >= 5 && x <= 11)
+        {
+            if (x == 8) return new Color(245, 200, 45);
+            return new Color(35, 35, 42);
+        }
 
-        return c;
+        // Crossing legs
+        if (y >= 19 && y <= 24 && x >= 6 && x <= 10)
+        {
+            return (x <= 7) ? new Color(55, 60, 72) : new Color(40, 45, 55);
+        }
+
+        // Crossing feet
+        if (y >= 25 && y <= 27 && x >= 6 && x <= 11)
+        {
+            if (y == 25) return new Color(220, 35, 45);
+            if (y == 26) return new Color(245, 245, 250);
+            return new Color(35, 35, 40);
+        }
+
+        return Color.Transparent;
     }
 
     private static Color PlayerJumpPixels(int x, int y)
     {
-        var c = Color.Transparent;
+        // Airborne hero leap
+        if (y <= 10)
+        {
+            var c = PlayerIdlePixels(x, y);
+            // Scarf flying upward-back in wind
+            if (y == 9 && x >= 1 && x <= 4) return new Color(225, 35, 45);
+            if (y == 8 && x >= 0 && x <= 2) return new Color(195, 25, 35);
+            return c;
+        }
 
-        // Head
-        if (y >= 1 && y <= 4 && x >= 2 && x <= 5)
-            c = new Color(255, 220, 175);
-        if (y == 1 && x >= 2 && x <= 5)
-            c = new Color(60, 40, 30);
-        if (y == 3 && (x == 3 || x == 4))
-            c = new Color(20, 20, 20);
-        // Body
-        if (y >= 5 && y <= 10 && x >= 2 && x <= 5)
-            c = new Color(70, 130, 220);
-        // Arms up
-        if (y == 5 && x == 1)
-            c = new Color(70, 130, 220);
-        if (y == 5 && x == 6)
-            c = new Color(70, 130, 220);
-        // Legs together
-        if (y >= 11 && y <= 14 && x >= 3 && x <= 4)
-            c = new Color(130, 90, 50);
-        if (y == 15 && x >= 3 && x <= 4)
-            c = new Color(90, 60, 30);
+        // Torso
+        if (y >= 11 && y <= 16 && x >= 5 && x <= 11)
+        {
+            if (x == 8) return new Color(245, 245, 255);
+            return new Color(50, 120, 230);
+        }
 
-        return c;
+        // Arms reaching up/forward for momentum
+        if (y >= 9 && y <= 12 && (x == 3 || x == 13)) return new Color(40, 95, 195);
+        if (y >= 7 && y <= 8 && (x == 3 || x == 13)) return new Color(255, 218, 185);
+
+        // Belt
+        if (y == 17 && x >= 5 && x <= 11)
+        {
+            if (x == 8) return new Color(245, 200, 45);
+            return new Color(35, 35, 42);
+        }
+
+        // Legs tucked up in jump
+        if (y >= 18 && y <= 22 && x >= 4 && x <= 12)
+        {
+            if (x >= 5 && x <= 7) return new Color(60, 65, 80);
+            if (x >= 9 && x <= 11) return new Color(45, 50, 62);
+        }
+
+        // Shoes tucked up
+        if (y >= 23 && y <= 25 && x >= 4 && x <= 12)
+        {
+            if (y == 23) return new Color(220, 35, 45);
+            if (y == 24) return new Color(245, 245, 250);
+            return new Color(35, 35, 40);
+        }
+
+        return Color.Transparent;
     }
 
     // Platform: grass top, dirt body, dark edges

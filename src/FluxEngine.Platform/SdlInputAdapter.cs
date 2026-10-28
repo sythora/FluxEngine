@@ -15,6 +15,18 @@ internal static class SdlInputAdapter
             case SDL.SDL_EventType.SDL_KEYUP:
                 ProcessKeyboardEvent(evt.key, input, isDown: false);
                 break;
+            case SDL.SDL_EventType.SDL_CONTROLLERBUTTONDOWN:
+            case SDL.SDL_EventType.SDL_CONTROLLERBUTTONUP:
+                ProcessGamepadButtonEvent(evt.cbutton, input);
+                break;
+            case SDL.SDL_EventType.SDL_CONTROLLERAXISMOTION:
+                ProcessGamepadAxisEvent(evt.caxis, input);
+                break;
+            case SDL.SDL_EventType.SDL_CONTROLLERDEVICEADDED:
+                break; // Window owns opening and lifetime of controller handles.
+            case SDL.SDL_EventType.SDL_CONTROLLERDEVICEREMOVED:
+                input.DisconnectGamepad(evt.cdevice.which);
+                break;
             case SDL.SDL_EventType.SDL_MOUSEMOTION:
                 input.SetMousePosition(evt.motion.x, evt.motion.y);
                 break;
@@ -36,6 +48,55 @@ internal static class SdlInputAdapter
                 input.SetFocus(false);
                 break;
         }
+    }
+
+    private static void ProcessGamepadButtonEvent(SDL.SDL_ControllerButtonEvent buttonEvent, InputManager input)
+    {
+        var raw = (int)buttonEvent.button;
+        // SDL2-CS exposes the SDL 2.0.14 controller-button enum (through
+        // D-pad buttons), while newer SDL2 runtimes also emit the extended
+        // SDL 2.0.coming controller button values for PS share/touchpad.
+        var button = raw switch
+        {
+            0 => GamepadButton.A,
+            1 => GamepadButton.B,
+            2 => GamepadButton.X,
+            3 => GamepadButton.Y,
+            4 => GamepadButton.Back,
+            5 => GamepadButton.Guide,
+            6 => GamepadButton.Start,
+            7 => GamepadButton.LeftStick,
+            8 => GamepadButton.RightStick,
+            9 => GamepadButton.LeftShoulder,
+            10 => GamepadButton.RightShoulder,
+            11 => GamepadButton.DPadUp,
+            12 => GamepadButton.DPadDown,
+            13 => GamepadButton.DPadLeft,
+            14 => GamepadButton.DPadRight,
+            15 => GamepadButton.Misc1,
+            16 => GamepadButton.Misc2,
+            17 => GamepadButton.Misc3,
+            18 => GamepadButton.Misc4,
+            19 => GamepadButton.Misc5,
+            20 => GamepadButton.Touchpad,
+            _ => (GamepadButton?)null,
+        };
+        if (button.HasValue)
+            input.SetGamepadButton(buttonEvent.which, button.Value, buttonEvent.state != 0);
+    }
+
+    private static void ProcessGamepadAxisEvent(SDL.SDL_ControllerAxisEvent axisEvent, InputManager input)
+    {
+        if (axisEvent.axis >= (byte)SDL.SDL_GameControllerAxis.SDL_CONTROLLER_AXIS_MAX)
+            return;
+
+        var axis = (GamepadAxis)axisEvent.axis;
+        var value = axis == GamepadAxis.LeftTrigger || axis == GamepadAxis.RightTrigger
+            ? Math.Max(0, (axisEvent.axisValue + 32768f) / 65535f)
+            : axisEvent.axisValue < 0
+                ? axisEvent.axisValue / 32768f
+                : axisEvent.axisValue / 32767f;
+        input.SetGamepadAxis(axisEvent.which, axis, value);
     }
 
     private static void ProcessKeyboardEvent(SDL.SDL_KeyboardEvent keyboardEvent, InputManager input, bool isDown)

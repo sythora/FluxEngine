@@ -4,7 +4,7 @@
 
 You probably don't have SDL2.dll somewhere the app can find it. Put it next to
 the exe or add its folder to PATH. On Windows the build output goes to
-`artifacts/bin/Debug/net10.0/`.
+`build/<project>/Debug/net10.0/` (for example `build/FluxEngine.Demo/Debug/net10.0/`).
 
 ## I want PNG images
 

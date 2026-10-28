@@ -14,6 +14,9 @@ public sealed class Renderer
     {
         _windowHandle = windowHandle;
         _rendererHandle = rendererHandle;
+
+        // alpha blending for all draw primitives (rects, lines, etc.)
+        SDL.SDL_SetRenderDrawBlendMode(_rendererHandle, SDL.SDL_BlendMode.SDL_BLENDMODE_BLEND);
     }
 
     // scene sets this every frame
@@ -235,6 +238,7 @@ public sealed class Renderer
 
         try
         {
+            SDL.SDL_SetSurfaceBlendMode(surface, SDL.SDL_BlendMode.SDL_BLENDMODE_BLEND);
             return CreateTextureFromSurface(surface);
         }
         finally
@@ -250,6 +254,7 @@ public sealed class Renderer
         if (handle == IntPtr.Zero)
             throw new InvalidOperationException($"Couldn't create a texture: {SDL.SDL_GetError()}");
 
+        SDL.SDL_SetTextureBlendMode(handle, SDL.SDL_BlendMode.SDL_BLENDMODE_BLEND);
         SDL.SDL_QueryTexture(handle, out _, out _, out var width, out var height);
         return new Texture(handle, width, height);
     }

@@ -24,7 +24,7 @@ public sealed class GameUI : Component
     public GameUI(InputActions actions)
     {
         _actions = actions;
-        _font = new PixelFont(3f, Color.White);
+        _font = new PixelFont(2f, Color.White);
     }
 
     public bool IsPaused => _paused;
@@ -40,6 +40,7 @@ public sealed class GameUI : Component
         _showStart = false;
         _paused = false;
         _gameOver = false;
+        _flashTimer = 0f;
         Score = 0;
         Distance = 0;
         SurvivalTime = 0;
@@ -47,32 +48,7 @@ public sealed class GameUI : Component
 
     public override void OnUpdate(float deltaTime)
     {
-        if (_gameOver)
-        {
-            _flashTimer += deltaTime;
-            if (_actions.WasPressed("restart"))
-            {
-                _gameOver = false;
-                _showStart = false;
-                Score = 0;
-                Distance = 0;
-                SurvivalTime = 0;
-            }
-            return;
-        }
-
-        if (_showStart)
-        {
-            if (_actions.WasPressed("jump"))
-                _showStart = false;
-            return;
-        }
-
-        if (!_paused && _actions.WasPressed("pause"))
-            _paused = true;
-
-        if (_paused && _actions.WasPressed("pause"))
-            _paused = false;
+        _flashTimer += deltaTime;
     }
 
     public override void OnDraw(Renderer renderer)
@@ -94,93 +70,86 @@ public sealed class GameUI : Component
     private void DrawHud(Renderer renderer)
     {
         var scoreText = $"SCORE {Score:D6}";
-        var distText = $"DIST  {Distance:F0}m";
-        var timeText = $"TIME  {SurvivalTime:F1}s";
+        var distText = $"DIST  {Distance:F0}M";
+        var timeText = $"TIME  {SurvivalTime:F1}S";
 
-        _font.Draw(renderer, scoreText, new Vector2(20, 20), 2f);
-        _font.Draw(renderer, distText, new Vector2(20, 50), 2f);
-        _font.Draw(renderer, timeText, new Vector2(20, 80), 2f);
+        _font.Draw(renderer, scoreText, new Vector2(24, 20), 1.4f);
+        _font.Draw(renderer, distText, new Vector2(24, 46), 1.4f);
+        _font.Draw(renderer, timeText, new Vector2(24, 72), 1.4f);
 
         if (BestDistance >= 0)
         {
-            var bestText = $"BEST  {BestDistance:F0}m";
-            var bestWidth = _font.MeasureWidth(bestText, 2f);
-            _font.Draw(renderer, bestText, new Vector2(960 - bestWidth - 20, 20), 2f);
+            var bestText = $"BEST  {BestDistance:F0}M";
+            var bestWidth = _font.MeasureWidth(bestText, 1.4f);
+            _font.Draw(renderer, bestText, new Vector2(960 - bestWidth - 24, 20), 1.4f);
         }
     }
 
     private void DrawStartScreen(Renderer renderer)
     {
-        renderer.DrawRectangle(new Rectangle(0, 0, 960, 720), new Color(20, 30, 50, 230));
+        renderer.DrawRectangle(new Rectangle(0, 0, 960, 720), new Color(15, 22, 38, 220));
 
         var title = "FLUX RUNNER";
-        var titleWidth = _font.MeasureWidth(title, 4f);
-        _font.Draw(renderer, title, new Vector2(480 - titleWidth / 2, 200), 4f);
+        var titleWidth = _font.MeasureWidth(title, 3.2f);
+        _font.Draw(renderer, title, new Vector2(480 - titleWidth / 2, 170), 3.2f);
 
         var sub = "INFINITE PLATFORMER";
-        var subWidth = _font.MeasureWidth(sub, 2f);
-        _font.Draw(renderer, sub, new Vector2(480 - subWidth / 2, 300), 2f);
+        var subWidth = _font.MeasureWidth(sub, 1.6f);
+        _font.Draw(renderer, sub, new Vector2(480 - subWidth / 2, 240), 1.6f);
 
-        var hint = "PRESS SPACE TO START";
-        var hintWidth = _font.MeasureWidth(hint, 2f);
-        var flash = MathF.Sin(Time.TotalTime * 4f) > 0 ? Color.White : new Color(100, 100, 100);
-        // Draw hint with flashing color
-        var oldColor = _font; // can't change color per call easily, skip flash
-        _font.Draw(renderer, hint, new Vector2(480 - hintWidth / 2, 500), 2f);
+        var hint = "PRESS SPACE OR GAMEPAD A TO START";
+        var hintWidth = _font.MeasureWidth(hint, 1.3f);
+        _font.Draw(renderer, hint, new Vector2(480 - hintWidth / 2, 430), 1.3f);
 
-        var controls = "A/D MOVE  SPACE JUMP  ESC PAUSE";
-        var ctrlWidth = _font.MeasureWidth(controls, 1.5f);
-        _font.Draw(renderer, controls, new Vector2(480 - ctrlWidth / 2, 580), 1.5f);
+        var controls = "A/D MOVE  SPACE/A JUMP  ESC/START PAUSE  R RESTART";
+        var ctrlWidth = _font.MeasureWidth(controls, 1.1f);
+        _font.Draw(renderer, controls, new Vector2(480 - ctrlWidth / 2, 510), 1.1f);
     }
 
     private void DrawPauseScreen(Renderer renderer)
     {
-        renderer.DrawRectangle(new Rectangle(0, 0, 960, 720), new Color(0, 0, 0, 180));
+        renderer.DrawRectangle(new Rectangle(0, 0, 960, 720), new Color(0, 0, 0, 190));
 
         var title = "PAUSED";
-        var titleWidth = _font.MeasureWidth(title, 4f);
-        _font.Draw(renderer, title, new Vector2(480 - titleWidth / 2, 280), 4f);
+        var titleWidth = _font.MeasureWidth(title, 3f);
+        _font.Draw(renderer, title, new Vector2(480 - titleWidth / 2, 280), 3f);
 
-        var hint = "PRESS ESC TO RESUME";
-        var hintWidth = _font.MeasureWidth(hint, 2f);
-        _font.Draw(renderer, hint, new Vector2(480 - hintWidth / 2, 380), 2f);
+        var hint = "PRESS ESC OR GAMEPAD START TO RESUME";
+        var hintWidth = _font.MeasureWidth(hint, 1.3f);
+        _font.Draw(renderer, hint, new Vector2(480 - hintWidth / 2, 370), 1.3f);
     }
 
     private void DrawGameOverScreen(Renderer renderer)
     {
-        var flash = MathF.Sin(_flashTimer * 8f) > 0;
-
-        renderer.DrawRectangle(new Rectangle(0, 0, 960, 720), new Color(40, 20, 20, 220));
+        renderer.DrawRectangle(new Rectangle(0, 0, 960, 720), new Color(30, 15, 20, 225));
 
         var title = "GAME OVER";
-        var titleWidth = _font.MeasureWidth(title, 4f);
-        var titleColor = flash ? Color.Red : new Color(150, 50, 50);
-        // Can't change font color per call, draw in white
-        _font.Draw(renderer, title, new Vector2(480 - titleWidth / 2, 240), 4f);
+        var titleWidth = _font.MeasureWidth(title, 3.2f);
+        _font.Draw(renderer, title, new Vector2(480 - titleWidth / 2, 210), 3.2f);
 
         var scoreText = $"SCORE: {Score:D6}";
-        var scoreWidth = _font.MeasureWidth(scoreText, 2f);
-        _font.Draw(renderer, scoreText, new Vector2(480 - scoreWidth / 2, 340), 2f);
+        var scoreWidth = _font.MeasureWidth(scoreText, 1.5f);
+        _font.Draw(renderer, scoreText, new Vector2(480 - scoreWidth / 2, 310), 1.5f);
 
-        var distText = $"DISTANCE: {Distance:F0}m";
-        var distWidth = _font.MeasureWidth(distText, 2f);
-        _font.Draw(renderer, distText, new Vector2(480 - distWidth / 2, 370), 2f);
+        var distText = $"DISTANCE: {Distance:F0}M";
+        var distWidth = _font.MeasureWidth(distText, 1.5f);
+        _font.Draw(renderer, distText, new Vector2(480 - distWidth / 2, 345), 1.5f);
 
         if (Distance >= BestDistance && BestDistance > 0)
         {
             var newBest = "NEW BEST!";
-            var bestWidth = _font.MeasureWidth(newBest, 2f);
-            _font.Draw(renderer, newBest, new Vector2(480 - bestWidth / 2, 400), 2f);
+            var bestWidth = _font.MeasureWidth(newBest, 1.5f);
+            _font.Draw(renderer, newBest, new Vector2(480 - bestWidth / 2, 380), 1.5f);
         }
         else if (BestDistance > 0)
         {
-            var bestText = $"BEST: {BestDistance:F0}m";
-            var bestWidth = _font.MeasureWidth(bestText, 2f);
-            _font.Draw(renderer, bestText, new Vector2(480 - bestWidth / 2, 400), 2f);
+            var bestText = $"BEST: {BestDistance:F0}M";
+            var bestWidth = _font.MeasureWidth(bestText, 1.5f);
+            _font.Draw(renderer, bestText, new Vector2(480 - bestWidth / 2, 380), 1.5f);
         }
 
-        var hint = "PRESS R TO RESTART";
-        var hintWidth = _font.MeasureWidth(hint, 2f);
-        _font.Draw(renderer, hint, new Vector2(480 - hintWidth / 2, 500), 2f);
+        var hint = "PRESS SPACE / A / R TO RESPAWN";
+        var hintWidth = _font.MeasureWidth(hint, 1.3f);
+        _font.Draw(renderer, hint, new Vector2(480 - hintWidth / 2, 470), 1.3f);
     }
 }

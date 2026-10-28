@@ -87,9 +87,8 @@ var distance = 0f;
 var survivalTime = 0f;
 var startX = 100f;
 playerEnt.Position = new Vector2(startX, 300f);
-scene.Solids.Add(new BoxCollider(new Vector2(800, 624), new Vector2(3200, 40)));
-scene.Solids.Add(new BoxCollider(new Vector2(-16, 320), new Vector2(40, 1280)));
-scene.Solids.Add(new BoxCollider(new Vector2(1616, 320), new Vector2(40, 1280)));
+// Left barrier only: blocks walking backwards into negative space, with no floor or right wall to obstruct the run
+scene.Solids.Add(new BoxCollider(new Vector2(-40, 360), new Vector2(40, 2000)));
 
 // Start music (loops, safe if no audio device)
 if (music is not null)
@@ -99,9 +98,18 @@ if (music is not null)
 var actions = engine.Input.Actions;
 actions.Bind("move.left", Key.A, Key.Left);
 actions.Bind("move.right", Key.D, Key.Right);
+actions.BindGamepadAxis("move.left", GamepadAxis.LeftX, direction: -1f);
+actions.BindGamepadAxis("move.right", GamepadAxis.LeftX, direction: 1f);
+actions.BindGamepadButton("move.left", GamepadButton.DPadLeft);
+actions.BindGamepadButton("move.right", GamepadButton.DPadRight);
 actions.Bind("jump", Key.Space, Key.Up);
+actions.BindGamepadButton("jump", GamepadButton.A);
 actions.Bind("pause", Key.Escape);
-actions.Bind("restart", Key.R);
+actions.BindGamepadButton("pause", GamepadButton.Start);
+actions.Bind("restart", Key.R, Key.Space, Key.Enter);
+actions.BindGamepadButton("restart", GamepadButton.Y, GamepadButton.A, GamepadButton.Start);
+
+var respawnCooldown = 0f;
 
 // Helper to restart the game from scratch
 void RestartGame()
@@ -113,6 +121,7 @@ void RestartGame()
     }
 
     state = 1;
+    respawnCooldown = 0f;
     ui.Reset();
     distance = 0f;
     survivalTime = 0f;
@@ -126,6 +135,10 @@ void RestartGame()
     if (body is not null)
         body.Velocity = Vector2.Zero;
 
+    // Reset camera position to starter platform
+    if (scene.Camera is not null)
+        scene.Camera.Position = new Vector2(viewWidth / 2f, viewHeight / 2f);
+
     // Destroy all existing platforms, coins, hazards
     foreach (var tag in new[] { "platform", "coin", "hazard" })
     {
@@ -133,11 +146,9 @@ void RestartGame()
             scene.Destroy(ent);
     }
 
-    // Restore the base floor and bounds for the new run.
+    // Restore the left boundary for the new run.
     scene.Solids.Clear();
-    scene.Solids.Add(new BoxCollider(new Vector2(800, 624), new Vector2(3200, 40)));
-    scene.Solids.Add(new BoxCollider(new Vector2(-16, 320), new Vector2(40, 1280)));
-    scene.Solids.Add(new BoxCollider(new Vector2(1616, 320), new Vector2(40, 1280)));
+    scene.Solids.Add(new BoxCollider(new Vector2(-40, 360), new Vector2(40, 2000)));
 
     // Reset generator
     generator.Reset();
@@ -177,9 +188,14 @@ engine.Run(
             ui.Resume();
         }
 
-        if (state == 3 && actions.WasPressed("restart"))
+        if (state == 3)
         {
-            RestartGame();
+            respawnCooldown += deltaTime;
+            ui.OnUpdate(deltaTime);
+            if (actions.WasPressed("restart") || actions.WasPressed("jump") || respawnCooldown >= 1.2f)
+            {
+                RestartGame();
+            }
         }
 
         // --- Only simulate when playing ---
@@ -238,6 +254,7 @@ engine.Run(
             if (hazard is not null && hazard.TouchedBy(playerEnt))
             {
                 state = 3;
+                respawnCooldown = 0f;
                 bestDistance = MathF.Max(bestDistance, distance);
                 hasBestDistance = true;
                 ui.BestDistance = bestDistance;
@@ -251,11 +268,12 @@ engine.Run(
             }
         }
 
-        // --- Fall death ---
-        var camY = scene.Camera?.Position.Y ?? 0;
-        if (playerEnt.Position.Y > camY + 400f)
+        // --- Fall death & respawn ---
+        var camY = scene.Camera?.Position.Y ?? 360f;
+        if (playerEnt.Position.Y > camY + 240f || playerEnt.Position.Y > 600f)
         {
             state = 3;
+            respawnCooldown = 0f;
             bestDistance = MathF.Max(bestDistance, distance);
             hasBestDistance = true;
             ui.BestDistance = bestDistance;
@@ -271,13 +289,37 @@ engine.Run(
     {
         engine.Window.Clear(scene.BackgroundColor.R, scene.BackgroundColor.G, scene.BackgroundColor.B);
 
-        // Camera follows player smoothly during play
+        // Camera follows player smoothly during play, framed on playable zone
         if (state == 1 && scene.Camera is not null)
-            scene.Camera.Follow(playerEnt.Position, 0.1f);
+        {
+            var targetCamY = Math.Clamp(playerEnt.Position.Y, 260f, 440f);
+            scene.Camera.Follow(new Vector2(playerEnt.Position.X + 140f, targetCamY), 0.12f);
+        }
 
         scene.Draw(engine.Renderer);
         ui.OnDraw(engine.Renderer);
         debugOverlay.Draw(engine.Renderer, scene, Time.UnscaledDeltaTime);
-
-        engine.Window.Present();
+        DrawGamepadStatus(engine.Renderer, engine.Input.FirstGamepad);
     });
+
+static void DrawGamepadStatus(Renderer renderer, GamepadDevice? gamepad)
+{
+    renderer.Camera = null;
+    var font = new PixelFont(1.5f, new Color(230, 240, 255));
+    renderer.DrawRectangle(new Rectangle(12, 650, 570, 52), new Color(12, 16, 24, 210));
+    renderer.DrawRectangleOutline(new Rectangle(12, 650, 570, 52), new Color(80, 120, 160));
+
+    if (gamepad is null)
+    {
+        font.Draw(renderer, "GAMEPAD: NONE - CONNECT A CONTROLLER TO TEST", new Vector2(22, 660));
+        return;
+    }
+
+    var name = gamepad.Name.ToUpperInvariant();
+    if (name.Length > 50)
+        name = name[..50];
+    font.Draw(renderer, $"GAMEPAD {gamepad.InstanceId}: {name}", new Vector2(22, 658));
+    font.Draw(renderer,
+        $"STICK X {gamepad.GetAxis(GamepadAxis.LeftX):0.00}  A {(gamepad.IsButtonDown(GamepadButton.A) ? "DOWN" : "UP")}  B {(gamepad.IsButtonDown(GamepadButton.B) ? "DOWN" : "UP")}",
+        new Vector2(22, 680));
+}

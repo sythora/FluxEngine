@@ -47,6 +47,7 @@ demos/
   FluxEngine.Demo/          Sandbox demo: player, balls, physics, camera shake
 tests/                      Automated tests
 docs/                       Project documentation
+build/                      Build output, all projects: build/<project>/, tests: build/test/<project>/
 ```
 
 The folders under `src/` are organizational only, not separate projects. The

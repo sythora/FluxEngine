@@ -26,6 +26,9 @@ public sealed class SpriteRenderer : Component, ISpriteDrawer
             return;
         }
 
+        // nothing to draw when fully transparent
+        if (Color.A == 0) return;
+
         var rectangle = Rectangle.FromCenter(Entity.Position, Size * scale);
         renderer.DrawRectangle(rectangle, Color);
     }

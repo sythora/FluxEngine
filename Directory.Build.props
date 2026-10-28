@@ -3,7 +3,18 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <BaseOutputPath>$(MSBuildThisFileDirectory)artifacts/bin/</BaseOutputPath>
-    <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/bin/**;**/obj/**;$(MSBuildThisFileDirectory)build/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <!--
+    All build output goes under build/:
+      build/<ProjectName>/<Configuration>/<TargetFramework>/
+      build/test/<ProjectName>/<Configuration>/<TargetFramework>/   (projects under tests/)
+  -->
+  <PropertyGroup>
+    <_FluxProjectPath>$([System.String]::Copy('$(MSBuildProjectDirectory)').Replace('\', '/').ToLowerInvariant())</_FluxProjectPath>
+    <_FluxIsTestProject>$(_FluxProjectPath.Contains('/tests/'))</_FluxIsTestProject>
+    <_FluxBuildGroup Condition="'$(_FluxIsTestProject)' == 'True'">test\</_FluxBuildGroup>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)build\$(_FluxBuildGroup)$(MSBuildProjectName)\</BaseOutputPath>
   </PropertyGroup>
 </Project>
