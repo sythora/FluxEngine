@@ -1,4 +1,5 @@
 using FluxEngine.Graphics;
+using FluxEngine.Graphics.Lighting;
 using FluxEngine.Mathematics;
 using FluxEngine.Physics;
 
@@ -21,6 +22,8 @@ public sealed class Scene
 
     // all registered collider components (moving platforms, one-ways, etc)
     public IReadOnlyList<ColliderComponent> Colliders => _colliders;
+
+    public LightingSystem Lighting { get; } = new();
 
     public bool IsRunning { get; private set; }
     public IReadOnlyList<Entity> Entities => _entities;
@@ -83,6 +86,8 @@ public sealed class Scene
         {
             foreach (var collider in entity.Components.OfType<ColliderComponent>())
                 collider.OnRemovedFromScene();
+            foreach (var light in entity.Components.OfType<Light2D>())
+                light.OnRemovedFromScene();
 
             entity.DetachAllComponents();
             entity.Scene = null;
@@ -92,6 +97,7 @@ public sealed class Scene
         _destroyQueue.Clear();
         _colliders.Clear();
         Solids.Clear();
+        Lighting.Clear();
         IsRunning = false;
     }
 
@@ -146,6 +152,7 @@ public sealed class Scene
         }
 
         Camera?.Update(deltaTime);
+        Lighting.Update(deltaTime);
         ApplyDestroyQueue();
     }
 
@@ -174,6 +181,9 @@ public sealed class Scene
 
         foreach (var drawer in _spriteQueue)
             drawer.OnDraw(renderer);
+
+        if (Lighting.Enabled)
+            Lighting.Draw(renderer, Camera);
     }
 
     private void ApplyDestroyQueue()
@@ -190,6 +200,8 @@ public sealed class Scene
             {
                 if (component is ColliderComponent collider)
                     collider.OnRemovedFromScene();
+                if (component is Light2D light)
+                    light.OnRemovedFromScene();
             }
 
             entity.DetachAllComponents();

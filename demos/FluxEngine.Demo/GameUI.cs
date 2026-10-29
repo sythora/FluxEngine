@@ -1,5 +1,6 @@
 using FluxEngine.Core;
 using FluxEngine.Graphics;
+using FluxEngine.Graphics.Lighting;
 using FluxEngine.Input;
 using FluxEngine.Mathematics;
 
@@ -15,6 +16,7 @@ public sealed class GameUI : Component
     public float Distance { get; set; }
     public float BestDistance { get; set; }
     public float SurvivalTime { get; set; }
+    public DayNightCycle? DayNight { get; set; }
 
     private bool _showStart = true;
     private bool _paused;
@@ -79,6 +81,19 @@ public sealed class GameUI : Component
         _font.Draw(renderer, scoreText, new Vector2(24, 20), Color.White, 2f);
         _font.Draw(renderer, distText, new Vector2(24, 46), Color.White, 2f);
         _font.Draw(renderer, timeText, new Vector2(24, 72), Color.White, 2f);
+
+        if (DayNight is not null)
+        {
+            var phaseText = $"{DayNight.FormattedTime} {DayNight.Phase.ToString().ToUpperInvariant()}";
+            var phaseColor = DayNight.Phase switch
+            {
+                DayNightPhase.Dawn => new Color(255, 190, 130),
+                DayNightPhase.Day => new Color(255, 255, 180),
+                DayNightPhase.Dusk => new Color(255, 140, 90),
+                _ => new Color(160, 190, 255),
+            };
+            _font.Draw(renderer, phaseText, new Vector2(24, 98), phaseColor, 2f);
+        }
 
         if (BestDistance >= 0)
         {

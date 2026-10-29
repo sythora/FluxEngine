@@ -26,6 +26,7 @@ public sealed class Engine : IDisposable
     public InputManager Input => _window.Input;
     public InputActions Actions => _window.Input.Actions;
     public Renderer Renderer => _window.Renderer;
+    public EngineSettings Settings { get; set; } = EngineSettings.Load();
 
     // texture cache, shared by everything
     public AssetManager Assets { get; } = new();

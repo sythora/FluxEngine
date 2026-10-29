@@ -2,6 +2,7 @@ using FluxEngine.Audio;
 using FluxEngine.Content;
 using FluxEngine.Core;
 using FluxEngine.Graphics;
+using FluxEngine.Graphics.Lighting;
 using FluxEngine.Input;
 using FluxEngine.Mathematics;
 using FluxEngine.Physics;
@@ -67,8 +68,24 @@ particles.MaxParticles = 60;
 
 var playerCtrl = new PlayerController(engine.Input.Actions, particles);
 playerCtrl.Jumped += () => { if (jumpSound is not null) engine.Audio.Play(jumpSound, 0.6f); };
-playerCtrl.Landed += () => { if (landSound is not null) engine.Audio.Play(landSound, 0.5f); };
+playerCtrl.Landed += () =>
+{
+    if (landSound is not null) engine.Audio.Play(landSound, 0.5f);
+    if (engine.Settings.EnableScreenShake)
+        scene.Camera?.AddShake(0.15f);
+};
 playerEnt.AddComponent(playerCtrl);
+
+var playerLight = playerEnt.AddComponent<Light2D>();
+playerLight.Radius = 180f;
+playerLight.Color = new Color(255, 220, 160);
+playerLight.Flicker = true;
+playerLight.FlickerSpeed = 6.0f;
+playerLight.FlickerAmount = 0.12f;
+
+scene.Lighting.Enabled = true;
+scene.Lighting.DayNight.DayDuration = 60f;
+scene.Lighting.DayNight.SetHour(17.5f);
 
 var generatorEnt = scene.Spawn("generator");
 var generator = new PlatformGenerator(playerCtrl, Rng.Shared, viewWidth);
@@ -78,10 +95,38 @@ generatorEnt.AddComponent(generator);
 // its camera-free drawing cannot affect world rendering.
 var hudFont = BuiltInFonts.Load(engine.Renderer, BuiltInFont.PressStart2P);
 var smallFont = BuiltInFonts.Load(engine.Renderer, BuiltInFont.Silkscreen);
-var ui = new GameUI(engine.Input.Actions, hudFont);
+var ui = new GameUI(engine.Input.Actions, hudFont)
+{
+    DayNight = scene.Lighting.DayNight,
+};
 
 var bgEnt = scene.Spawn("background");
 var bg = bgEnt.AddComponent<ParallaxBackground>();
+
+// ---------------------------------------------------------------------------
+// Cinematic Visual FX (driven by engine.Settings)
+// ---------------------------------------------------------------------------
+
+// God rays - volumetric light shafts streaking through the atmosphere
+var godRaysEnt = scene.Spawn("god_rays");
+var godRays = godRaysEnt.AddComponent<GodRaysRenderer>();
+godRays.RayCount = 5;
+godRays.Intensity = 0.8f;
+
+// Atmospheric particles - fireflies at night, warm dust motes by day
+var motesEnt = scene.Spawn("atmo_particles");
+motesEnt.Position = new Vector2(viewWidth / 2f, viewHeight / 2f);
+var atmoParticles = motesEnt.AddComponent<AtmosphericParticles>();
+atmoParticles.MaxParticles = 50;
+atmoParticles.SpawnRadiusX = 600f;
+atmoParticles.SpawnRadiusY = 400f;
+
+// Ground fog - rolling mist that hugs the platforms
+var fogEnt = scene.Spawn("ground_fog");
+var fog = fogEnt.AddComponent<GroundFog>();
+fog.BaseY = 480f;
+fog.ScrollSpeed = 25f;
+fog.Alpha = 0.4f;
 
 // ---------------------------------------------------------------------------
 // Game state
@@ -191,6 +236,31 @@ engine.Run(
         // --- Input handling that works in all states ---
         if (actions.WasPressed("debug.toggle"))
             debugOverlay.Enabled = !debugOverlay.Enabled;
+
+        if (engine.Input.WasKeyPressed(Key.T))
+            scene.Lighting.DayNight.AddHours(2f);
+
+        if (engine.Input.WasKeyPressed(Key.L))
+            engine.Settings.EnableLighting = !engine.Settings.EnableLighting;
+
+        // Toggle individual FX with number keys
+        if (engine.Input.WasKeyPressed(Key.D1))
+            engine.Settings.EnableVignette = !engine.Settings.EnableVignette;
+        if (engine.Input.WasKeyPressed(Key.D2))
+            engine.Settings.EnableGodRays = !engine.Settings.EnableGodRays;
+        if (engine.Input.WasKeyPressed(Key.D3))
+            engine.Settings.EnableAtmosphericParticles = !engine.Settings.EnableAtmosphericParticles;
+        if (engine.Input.WasKeyPressed(Key.D4))
+            engine.Settings.EnableFog = !engine.Settings.EnableFog;
+        if (engine.Input.WasKeyPressed(Key.D5))
+            engine.Settings.EnableScreenShake = !engine.Settings.EnableScreenShake;
+
+        // Save settings
+        if (engine.Input.WasKeyPressed(Key.F5))
+        {
+            engine.Settings.Save();
+            Log.Info("Settings saved.");
+        }
 
         if (state == 0 && actions.WasPressed("jump"))
         {
@@ -309,7 +379,11 @@ engine.Run(
     },
     render: () =>
     {
-        engine.Window.Clear(scene.BackgroundColor.R, scene.BackgroundColor.G, scene.BackgroundColor.B);
+        // Dynamically tint the background clear color from the day/night cycle
+        var ambientBg = scene.Lighting.Enabled
+            ? scene.Lighting.AmbientColor
+            : scene.BackgroundColor;
+        engine.Window.Clear(ambientBg.R, ambientBg.G, ambientBg.B);
 
         // Camera follows player smoothly during play, framed on playable zone
         if (state == 1 && scene.Camera is not null)
@@ -318,7 +392,29 @@ engine.Run(
             scene.Camera.Follow(new Vector2(playerEnt.Position.X + 140f, targetCamY), 0.12f);
         }
 
+        // Keep atmospheric entities centered on the camera so particles and fog
+        // follow the player throughout the run.
+        if (scene.Camera is not null)
+        {
+            motesEnt.Position = scene.Camera.Position;
+            fogEnt.Position = scene.Camera.Position;
+            godRaysEnt.Position = scene.Camera.Position;
+        }
+
+        // Apply settings toggles to visual systems every frame
+        var settings = engine.Settings;
+        scene.Lighting.Enabled = settings.EnableLighting;
+        godRays.Entity.Enabled = settings.EnableGodRays;
+        atmoParticles.Entity.Enabled = settings.EnableAtmosphericParticles;
+        fog.Entity.Enabled = settings.EnableFog;
+        scene.Camera!.MaxShakeOffset = settings.EnableScreenShake ? 10f : 0f;
+
         scene.Draw(engine.Renderer);
+
+        // Cinematic vignette overlay (after scene, before HUD)
+        if (settings.EnableVignette)
+            engine.Renderer.DrawVignette(0.75f);
+
         ui.OnDraw(engine.Renderer);
         debugOverlay.Draw(engine.Renderer, scene, Time.UnscaledDeltaTime);
 

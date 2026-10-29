@@ -33,6 +33,15 @@ public static class TextureGenerator
     public static string Coin(int frame)
         => Write($"coin_{frame}.png", 8, 8, (x, y) => CoinPixels(x, y, frame));
 
+    public static string Moon()
+        => Write("moon.png", 48, 48, MoonPixels);
+
+    public static string Sun()
+        => Write("sun.png", 48, 48, SunPixels);
+
+    public static string Cloud()
+        => Write("cloud.png", 64, 32, CloudPixels);
+
     private static string Write(string name, int width, int height,
         Func<int, int, Color> pixel)
     {
@@ -328,5 +337,91 @@ public static class TextureGenerator
             return new Color(255, 255, 150);
 
         return shade;
+    }
+
+    private static Color MoonPixels(int x, int y)
+    {
+        var cx = 23.5f;
+        var cy = 23.5f;
+        var dx = x - cx;
+        var dy = y - cy;
+        var dist = MathF.Sqrt(dx * dx + dy * dy);
+
+        if (dist > 22f)
+            return Color.Transparent;
+
+        if (dist > 19.5f)
+        {
+            var glowAlpha = (byte)((22f - dist) / 2.5f * 180f);
+            return new Color(200, 220, 255, glowAlpha);
+        }
+
+        var baseColor = new Color(230, 238, 255);
+
+        var crater1 = MathF.Sqrt(MathF.Pow(x - 17f, 2) + MathF.Pow(y - 18f, 2));
+        var crater2 = MathF.Sqrt(MathF.Pow(x - 29f, 2) + MathF.Pow(y - 28f, 2));
+        var crater3 = MathF.Sqrt(MathF.Pow(x - 28f, 2) + MathF.Pow(y - 15f, 2));
+        var crater4 = MathF.Sqrt(MathF.Pow(x - 18f, 2) + MathF.Pow(y - 30f, 2));
+
+        if (crater1 < 4.5f || crater2 < 5.5f || crater3 < 3.5f || crater4 < 4.0f)
+            return new Color(175, 185, 215);
+
+        if (crater1 < 5.5f || crater2 < 6.8f || crater3 < 4.5f || crater4 < 5.0f)
+            return new Color(205, 215, 235);
+
+        if (dx > 4f)
+            return new Color(210, 220, 245);
+
+        return baseColor;
+    }
+
+    private static Color SunPixels(int x, int y)
+    {
+        var cx = 23.5f;
+        var cy = 23.5f;
+        var dx = x - cx;
+        var dy = y - cy;
+        var dist = MathF.Sqrt(dx * dx + dy * dy);
+
+        if (dist > 23f)
+            return Color.Transparent;
+
+        var angle = MathF.Atan2(dy, dx);
+        var rayMod = MathF.Abs(MathF.Sin(angle * 6f));
+        var maxRayDist = 18f + rayMod * 5f;
+
+        if (dist > maxRayDist)
+            return Color.Transparent;
+
+        if (dist > 17f)
+        {
+            var coronaAlpha = (byte)((maxRayDist - dist) / (maxRayDist - 17f + 0.1f) * 210f);
+            return new Color(255, 170, 60, coronaAlpha);
+        }
+
+        if (dist < 8f)
+            return new Color(255, 255, 230);
+        if (dist < 13f)
+            return new Color(255, 235, 120);
+        return new Color(255, 185, 50);
+    }
+
+    private static Color CloudPixels(int x, int y)
+    {
+        var c1 = MathF.Sqrt(MathF.Pow(x - 20f, 2) + MathF.Pow(y - 18f, 2)) / 12f;
+        var c2 = MathF.Sqrt(MathF.Pow(x - 33f, 2) + MathF.Pow(y - 14f, 2)) / 14f;
+        var c3 = MathF.Sqrt(MathF.Pow(x - 47f, 2) + MathF.Pow(y - 19f, 2)) / 11f;
+        var c4 = MathF.Sqrt(MathF.Pow(x - 32f, 2) + MathF.Pow(y - 22f, 2)) / 15f;
+
+        var minDist = MathF.Min(MathF.Min(c1, c2), MathF.Min(c3, c4));
+        if (minDist > 1.0f)
+            return Color.Transparent;
+
+        if (y < 12)
+            return new Color(255, 255, 255, 240);
+        if (y > 22)
+            return new Color(185, 195, 220, 230);
+
+        return new Color(235, 240, 250, 240);
     }
 }

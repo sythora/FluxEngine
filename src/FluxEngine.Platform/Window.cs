@@ -173,6 +173,8 @@ public sealed class Window : IDisposable
     {
         _isOpen = false;
 
+        Renderer?.Dispose();
+
         if (_renderer != IntPtr.Zero)
         {
             SDL.SDL_DestroyRenderer(_renderer);
@@ -237,7 +239,26 @@ public sealed class Window : IDisposable
                 _handle,
                 -1,
                 SDL.SDL_RendererFlags.SDL_RENDERER_ACCELERATED |
-                SDL.SDL_RendererFlags.SDL_RENDERER_PRESENTVSYNC);
+                SDL.SDL_RendererFlags.SDL_RENDERER_PRESENTVSYNC |
+                SDL.SDL_RendererFlags.SDL_RENDERER_TARGETTEXTURE);
+
+            if (_renderer == IntPtr.Zero)
+            {
+                _renderer = SDL.SDL_CreateRenderer(
+                    _handle,
+                    -1,
+                    SDL.SDL_RendererFlags.SDL_RENDERER_ACCELERATED |
+                    SDL.SDL_RendererFlags.SDL_RENDERER_PRESENTVSYNC);
+            }
+
+            if (_renderer == IntPtr.Zero)
+            {
+                _renderer = SDL.SDL_CreateRenderer(
+                    _handle,
+                    -1,
+                    SDL.SDL_RendererFlags.SDL_RENDERER_SOFTWARE |
+                    SDL.SDL_RendererFlags.SDL_RENDERER_TARGETTEXTURE);
+            }
 
             if (_renderer == IntPtr.Zero)
             {

@@ -11,6 +11,11 @@ public sealed class Renderer
 {
     private readonly IntPtr _windowHandle;
     private readonly IntPtr _rendererHandle;
+    private Texture? _radialLightTexture;
+    private Texture? _vignetteTexture;
+    private IntPtr _lightmapTexture;
+    private int _lightmapWidth;
+    private int _lightmapHeight;
 
     internal Renderer(IntPtr windowHandle, IntPtr rendererHandle)
     {
@@ -134,6 +139,101 @@ public sealed class Renderer
                 (int)current.Y);
 
             previous = current;
+        }
+    }
+
+    // four corners filled scanline by scanline while the color fades from the
+    // top edge to the bottom edge. used by soft god rays and light shafts.
+    // assumes a convex quad ordered (top-left, top-right, bottom-right, bottom-left)
+    public void DrawQuadGradient(
+        Vector2 topLeft,
+        Vector2 topRight,
+        Vector2 bottomLeft,
+        Vector2 bottomRight,
+        Color topColor,
+        Color bottomColor)
+    {
+        var tl = ToScreen(topLeft);
+        var tr = ToScreen(topRight);
+        var br = ToScreen(bottomRight);
+        var bl = ToScreen(bottomLeft);
+
+        var minY = (int)MathF.Ceiling(Math.Min(Math.Min(tl.Y, tr.Y), Math.Min(bl.Y, br.Y)));
+        var maxY = (int)MathF.Floor(Math.Max(Math.Max(tl.Y, tr.Y), Math.Max(bl.Y, br.Y)));
+
+        var sides = new (Vector2 a, Vector2 b, Color ca, Color cb)[]
+        {
+            (tl, tr, topColor, topColor),       // top edge
+            (tr, br, topColor, bottomColor),    // right edge
+            (br, bl, bottomColor, bottomColor), // bottom edge (rarely hit at y>
+            (bl, tl, bottomColor, topColor),    // left edge
+        };
+
+        for (var y = minY; y <= maxY; y++)
+        {
+            var scanY = y + 0.5f;
+            float? leftX = null, rightX = null;
+            Color? leftColor = null, rightColor = null;
+
+            foreach (var (a, b, ca, cb) in sides)
+            {
+                if (a.Y == b.Y)
+                    continue;
+
+                var t = (scanY - a.Y) / (b.Y - a.Y);
+                if (t < 0f || t > 1f)
+                    continue;
+
+                var x = a.X + (b.X - a.X) * t;
+                var color = Color.Lerp(ca, cb, t);
+
+                if (leftX is null || x < leftX)
+                {
+                    leftX = x;
+                    leftColor = color;
+                }
+
+                if (rightX is null || x > rightX)
+                {
+                    rightX = x;
+                    rightColor = color;
+                }
+            }
+
+            if (leftX is null || rightX is null)
+                continue;
+
+            var spanStart = leftX.Value;
+            var spanEnd = rightX.Value;
+            var startColor = leftColor!.Value;
+            var endColor = rightColor!.Value;
+
+            // fill the full scanline row in fixed slices so wide beams stay smooth
+            const int slices = 6;
+
+            if (spanEnd <= spanStart)
+                continue;
+
+            var width = spanEnd - spanStart;
+            var sliceWidth = width / slices;
+            for (var s = 0; s < slices; s++)
+            {
+                var t0 = s / (float)slices;
+                var t1 = s < slices - 1 ? (s + 1) / (float)slices : 1f;
+                var x0 = spanStart + width * t0;
+                var x1 = spanStart + width * t1;
+                var color = Color.Lerp(startColor, endColor, (t0 + t1) * 0.5f);
+                var rect = new SDL.SDL_Rect
+                {
+                    x = (int)x0,
+                    y = y,
+                    w = (int)MathF.Ceiling(x1 - x0) + 1,
+                    h = 1,
+                };
+
+                SetColor(color);
+                SDL.SDL_RenderFillRect(_rendererHandle, ref rect);
+            }
         }
     }
 
@@ -411,6 +511,192 @@ public sealed class Renderer
         SDL.SDL_SetTextureBlendMode(handle, SDL.SDL_BlendMode.SDL_BLENDMODE_BLEND);
         SDL.SDL_QueryTexture(handle, out _, out _, out var width, out var height);
         return new Texture(handle, width, height);
+    }
+
+    public bool SupportsLighting =>
+        _rendererHandle != IntPtr.Zero &&
+        SDL.SDL_RenderTargetSupported(_rendererHandle) == SDL.SDL_bool.SDL_TRUE;
+
+    private Texture GetOrCreateRadialLightTexture()
+    {
+        if (_radialLightTexture is not null)
+            return _radialLightTexture;
+
+        const int size = 128;
+        var pixels = new byte[size * size * 4];
+        var center = (size - 1) * 0.5f;
+        var maxRadius = size * 0.5f;
+
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                var dx = x - center;
+                var dy = y - center;
+                var dist = MathF.Sqrt(dx * dx + dy * dy);
+                var t = Math.Clamp(dist / maxRadius, 0f, 1f);
+
+                var falloff = t >= 1f ? 0f : (1f + MathF.Cos(t * MathF.PI)) * 0.5f;
+                var alpha = (byte)(falloff * 255f);
+
+                var index = (y * size + x) * 4;
+                pixels[index + 0] = alpha;
+                pixels[index + 1] = alpha;
+                pixels[index + 2] = alpha;
+                pixels[index + 3] = alpha;
+            }
+        }
+
+        _radialLightTexture = CreateTextureFromPixels(pixels, size, size, "radial_light_mask");
+        SDL.SDL_SetTextureBlendMode(_radialLightTexture.Handle, SDL.SDL_BlendMode.SDL_BLENDMODE_ADD);
+        return _radialLightTexture;
+    }
+
+    private void EnsureLightmap(int width, int height)
+    {
+        if (_lightmapTexture != IntPtr.Zero && _lightmapWidth == width && _lightmapHeight == height)
+            return;
+
+        if (_lightmapTexture != IntPtr.Zero)
+        {
+            SDL.SDL_DestroyTexture(_lightmapTexture);
+            _lightmapTexture = IntPtr.Zero;
+        }
+
+        _lightmapWidth = Math.Max(1, width);
+        _lightmapHeight = Math.Max(1, height);
+
+        _lightmapTexture = SDL.SDL_CreateTexture(
+            _rendererHandle,
+            SDL.SDL_PIXELFORMAT_RGBA8888,
+            (int)SDL.SDL_TextureAccess.SDL_TEXTUREACCESS_TARGET,
+            _lightmapWidth,
+            _lightmapHeight);
+
+        if (_lightmapTexture != IntPtr.Zero)
+            SDL.SDL_SetTextureBlendMode(_lightmapTexture, SDL.SDL_BlendMode.SDL_BLENDMODE_MOD);
+    }
+
+    public bool BeginLightmap(Color ambientColor)
+    {
+        if (!SupportsLighting)
+            return false;
+
+        SDL.SDL_GetWindowSize(_windowHandle, out var width, out var height);
+        EnsureLightmap(width, height);
+
+        if (_lightmapTexture == IntPtr.Zero)
+            return false;
+
+        if (SDL.SDL_SetRenderTarget(_rendererHandle, _lightmapTexture) != 0)
+            return false;
+
+        SDL.SDL_SetRenderDrawColor(_rendererHandle, ambientColor.R, ambientColor.G, ambientColor.B, 255);
+        SDL.SDL_RenderClear(_rendererHandle);
+        return true;
+    }
+
+    public void DrawLight(Vector2 worldPosition, float radius, Color color, float intensity = 1f)
+    {
+        if (_lightmapTexture == IntPtr.Zero || radius <= 0f || intensity <= 0f)
+            return;
+
+        var screen = ToScreen(worldPosition);
+        var pixelRadius = radius * Zoom;
+        if (pixelRadius <= 0f)
+            return;
+
+        var diameter = (int)(pixelRadius * 2);
+        var rect = new SDL.SDL_Rect
+        {
+            x = (int)(screen.X - pixelRadius),
+            y = (int)(screen.Y - pixelRadius),
+            w = diameter,
+            h = diameter,
+        };
+
+        var radial = GetOrCreateRadialLightTexture();
+        var effectiveAlpha = (byte)Math.Clamp(color.A * intensity, 0, 255);
+
+        SDL.SDL_SetTextureColorMod(radial.Handle, color.R, color.G, color.B);
+        SDL.SDL_SetTextureAlphaMod(radial.Handle, effectiveAlpha);
+        SDL.SDL_RenderCopy(_rendererHandle, radial.Handle, IntPtr.Zero, ref rect);
+        SDL.SDL_SetTextureColorMod(radial.Handle, 255, 255, 255);
+        SDL.SDL_SetTextureAlphaMod(radial.Handle, 255);
+    }
+
+    public void EndLightmap()
+    {
+        if (_lightmapTexture == IntPtr.Zero)
+            return;
+
+        SDL.SDL_SetRenderTarget(_rendererHandle, IntPtr.Zero);
+        SDL.SDL_RenderCopy(_rendererHandle, _lightmapTexture, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    private Texture GetOrCreateVignetteTexture()
+    {
+        if (_vignetteTexture is not null)
+            return _vignetteTexture;
+
+        const int size = 256;
+        var pixels = new byte[size * size * 4];
+        var center = (size - 1) * 0.5f;
+        var maxDist = MathF.Sqrt(center * center + center * center);
+
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                var dx = x - center;
+                var dy = y - center;
+                var dist = MathF.Sqrt(dx * dx + dy * dy);
+                var normalized = dist / maxDist;
+
+                var t = Math.Clamp((normalized - 0.35f) / 0.65f, 0f, 1f);
+                var alpha = (byte)(MathF.Pow(t, 1.8f) * 235f);
+
+                var index = (y * size + x) * 4;
+                pixels[index + 0] = 5;
+                pixels[index + 1] = 8;
+                pixels[index + 2] = 16;
+                pixels[index + 3] = alpha;
+            }
+        }
+
+        _vignetteTexture = CreateTextureFromPixels(pixels, size, size, "vignette_mask");
+        return _vignetteTexture;
+    }
+
+    public void DrawVignette(float intensity = 0.85f)
+    {
+        if (_rendererHandle == IntPtr.Zero || intensity <= 0f)
+            return;
+
+        var vignette = GetOrCreateVignetteTexture();
+        SDL.SDL_GetWindowSize(_windowHandle, out var width, out var height);
+
+        var rect = new SDL.SDL_Rect { x = 0, y = 0, w = width, h = height };
+        var alphaMod = (byte)Math.Clamp(intensity * 255f, 0, 255);
+
+        SDL.SDL_SetTextureAlphaMod(vignette.Handle, alphaMod);
+        SDL.SDL_RenderCopy(_rendererHandle, vignette.Handle, IntPtr.Zero, ref rect);
+        SDL.SDL_SetTextureAlphaMod(vignette.Handle, 255);
+    }
+
+    internal void Dispose()
+    {
+        if (_lightmapTexture != IntPtr.Zero)
+        {
+            SDL.SDL_DestroyTexture(_lightmapTexture);
+            _lightmapTexture = IntPtr.Zero;
+        }
+
+        _radialLightTexture?.Dispose();
+        _radialLightTexture = null;
+
+        _vignetteTexture?.Dispose();
+        _vignetteTexture = null;
     }
 
     private Vector2 ToScreen(Vector2 world)

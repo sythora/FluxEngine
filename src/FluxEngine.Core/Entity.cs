@@ -187,6 +187,8 @@ public sealed class Entity
 
             if (component is FluxEngine.Physics.ColliderComponent collider)
                 collider.OnRemovedFromScene();
+            if (component is FluxEngine.Graphics.Lighting.Light2D light)
+                light.OnRemovedFromScene();
 
             component.Entity = null!;
             _components.RemoveAt(i);

@@ -61,8 +61,8 @@ This roadmap turns the proposed feature list into an incremental plan for FluxEn
 
 ## Phase 5 - Rendering and polish
 
-- Pixel-perfect camera support: virtual resolution, integer scaling, pixel alignment, and resize behavior.
-- Investigate lighting and post-processing against SDL_Renderer capabilities first. If the desired effects cannot be supported cleanly, design an explicit GPU-rendering extension rather than layering fragile effects into the existing path.
+- [x] 2D dynamic ambient lighting and day/night cycle via SDL2 hardware render-target textures (`SDL_BLENDMODE_MOD` lightmap with `SDL_BLENDMODE_ADD` radial light masks, `DayNightCycle`, `Light2D` entity components, and flicker simulation).
+- [ ] Pixel-perfect camera support: virtual resolution, integer scaling, pixel alignment, and resize behavior.
 
 ## Not currently planned
 

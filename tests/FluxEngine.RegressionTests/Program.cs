@@ -2,7 +2,9 @@ using System.Text.Json;
 using FluxEngine.Content;
 using FluxEngine.Core;
 using FluxEngine.Graphics;
+using FluxEngine.Graphics.Lighting;
 using FluxEngine.Mathematics;
+using Color = FluxEngine.Mathematics.Color;
 using FluxEngine.Physics;
 using StbImageSharp;
 
@@ -80,6 +82,7 @@ TestLevelLoader();
 TestGameManager();
 TestPngRoundTrip();
 TestBuiltInFontMaps();
+TestDayNightAndLighting();
 Console.WriteLine("FluxEngine regression tests passed.");
 
 static List<EditableObject> SceneObjectsFromFile(SceneFile scene)
@@ -333,6 +336,73 @@ static void TestBuiltInFontMaps()
         "Silkscreen should keep its variable width advances.");
     Check(silk.Glyphs.Values.All(glyph => glyph.Source.Width > 0 && glyph.Source.Height > 0),
         "Every built-in glyph should have a valid atlas rectangle.");
+}
+
+static void TestDayNightAndLighting()
+{
+    var cycle = new DayNightCycle(12f, 120f);
+    Near(cycle.TimeOfDay, 12f, "Initial hour should be 12:00.");
+    Near(cycle.NormalizedTime, 0.5f, "Normalized time at noon should be 0.5.");
+    Check(cycle.FormattedTime == "12:00", "Formatted time at noon should be 12:00.");
+    Check(cycle.Phase == DayNightPhase.Day && cycle.IsDay && !cycle.IsNight, "12:00 should be Day phase.");
+    Check(cycle.AmbientColor == new Color(255, 255, 255), "Noon ambient color should be pure white.");
+
+    // Advance 6 hours in 30 seconds of simulation
+    cycle.Update(30f);
+    Near(cycle.TimeOfDay, 18f, "Advancing a quarter of day duration should advance 6 hours.");
+    Check(cycle.Phase == DayNightPhase.Dusk, "18:00 should be Dusk phase.");
+
+    cycle.SetHour(23.5f);
+    Check(cycle.Phase == DayNightPhase.Night && cycle.IsNight, "23:30 should be Night phase.");
+    Check(cycle.AmbientColor.R < 50 && cycle.AmbientColor.G < 50 && cycle.AmbientColor.B < 100,
+        "Night ambient color should be dark navy.");
+
+    cycle.SetHour(6.0f);
+    Check(cycle.Phase == DayNightPhase.Dawn, "06:00 should be Dawn phase.");
+    Check(cycle.AmbientColor.R > 200 && cycle.AmbientColor.G > 100, "Dawn ambient color should be warm golden-rose.");
+
+    // Hour wrapping tests
+    cycle.SetHour(25.5f);
+    Near(cycle.TimeOfDay, 1.5f, "Hours > 24 should wrap around modulo 24.");
+    cycle.SetHour(-3.0f);
+    Near(cycle.TimeOfDay, 21.0f, "Negative hours should wrap back from 24.");
+
+    // Paused cycle
+    cycle.IsPaused = true;
+    cycle.Update(100f);
+    Near(cycle.TimeOfDay, 21.0f, "Paused cycle should not advance time.");
+
+    // Scene and Light2D integration
+    var scene = new Scene();
+    Check(!scene.Lighting.Enabled, "Lighting should be disabled by default.");
+    scene.Lighting.Enabled = true;
+
+    var entity = scene.Spawn("lamp", new Vector2(100, 200));
+    var light = entity.AddComponent<Light2D>();
+    light.Radius = 150f;
+    light.Color = new Color(255, 220, 150);
+    light.Offset = new Vector2(5, -10);
+
+    scene.Start();
+    Check(scene.Lighting.Lights.Count == 1 && scene.Lighting.Lights[0] == light,
+        "Light2D should automatically register with scene.Lighting.");
+    Check(light.WorldPosition == new Vector2(105, 190), "Light world position should include entity position and offset.");
+
+    // Flicker test
+    Near(light.EffectiveRadius, 150f, "Non-flickering light effective radius should equal base radius.");
+    light.Flicker = true;
+    light.FlickerAmount = 0.2f;
+    light.OnUpdate(0.1f);
+    Check(MathF.Abs(light.EffectiveRadius - 150f) > 0.001f, "Flickering light should vary effective radius over time.");
+
+    // Destroy entity cleanup
+    entity.Destroy();
+    scene.FixedUpdate(0.016f); // triggers ApplyDestroyQueue
+    Check(scene.Lighting.Lights.Count == 0, "Destroyed entity light should unregister from scene.Lighting.");
+
+    // Standalone light test
+    scene.Lighting.AddStandaloneLight(new Vector2(50, 50), 80f, Color.Yellow);
+    Check(scene.Lighting.Enabled, "Lighting system should remain enabled.");
 }
 
 sealed class LifecycleProbe : Component

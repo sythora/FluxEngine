@@ -1,5 +1,6 @@
 using FluxEngine.Core;
 using FluxEngine.Graphics;
+using FluxEngine.Graphics.Lighting;
 using FluxEngine.Mathematics;
 using FluxEngine.Physics;
 
@@ -139,6 +140,7 @@ public sealed class PlatformGenerator : Component
             var coin = scene.Spawn(new Vector2(position.X, position.Y - 58f), "coin");
             coin.Tag = "coin";
             coin.AddComponent<Coin>();
+            coin.AddComponent(new Light2D { Radius = 70f, Color = new Color(255, 220, 80), Intensity = 0.85f });
             _coins.Add(coin);
         }
 
@@ -147,6 +149,7 @@ public sealed class PlatformGenerator : Component
             var hazard = scene.Spawn(new Vector2(position.X, position.Y - 22f), "hazard");
             hazard.Tag = "hazard";
             hazard.AddComponent<Hazard>();
+            hazard.AddComponent(new Light2D { Radius = 50f, Color = new Color(255, 60, 40), Intensity = 0.7f });
             _hazards.Add(hazard);
         }
     }
