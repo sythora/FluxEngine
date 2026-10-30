@@ -61,6 +61,27 @@ Build output lands in `build/<project>/<Configuration>/<tfm>/`, for example
 See [GettingStarted.md](docs/GettingStarted.md) for a first scene and
 [FAQ.md](docs/FAQ.md) if the window will not open.
 
+## Browser WebAssembly host
+
+The browser edition runs FluxRunner: Afterlight from the existing C# engine
+assembly under .NET WebAssembly; gameplay is not reimplemented in JavaScript.
+It includes the three-chapter story, platforming physics, signals, checkpoints,
+settings, synthesized browser audio, local progress saves, and touch controls.
+The Canvas backend draws engine-recorded geometry and text. SDL-backed texture
+loading, native audio, lighting, and framebuffer screenshots remain native-only.
+
+Install the .NET 10 SDK and the WebAssembly build tools, then run the host:
+
+```text
+dotnet workload install wasm-tools
+dotnet run --project web/FluxEngine.Web
+```
+
+For an optimized AOT publish, run
+`dotnet publish web/FluxEngine.Web -c Release`. See
+[WebAssembly.md](docs/WebAssembly.md) for the architecture, current limits, and
+porting notes.
+
 ## Controls
 
 | Action | Keyboard | Gamepad |
