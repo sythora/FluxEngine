@@ -1,6 +1,10 @@
 <Solution>
   <Project Path="src/FluxEngine.csproj" />
   <Project Path="editor/FluxEngine.Editor.csproj" />
+  <Folder Name="/src/" />
+  <Folder Name="/web/">
+    <Project Path="web/FluxEngine.Web/FluxEngine.Web.csproj" />
+  </Folder>
   <Project Path="demos/FluxEngine.Demo/FluxEngine.Demo.csproj" />
   <Project Path="tests/FluxEngine.GamepadTest/FluxEngine.GamepadTest.csproj" />
   <Project Path="tests/FluxEngine.RegressionTests/FluxEngine.RegressionTests.csproj" />

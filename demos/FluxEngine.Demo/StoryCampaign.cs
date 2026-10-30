@@ -73,6 +73,20 @@ public sealed class StoryCampaign
         return true;
     }
 
+    public void RestoreProgress(int completedChapters, float checkpointX, float segmentStartX)
+    {
+        if (completedChapters < 0 || completedChapters > Chapters.Count)
+            throw new ArgumentOutOfRangeException(nameof(completedChapters));
+        if (!float.IsFinite(checkpointX) || checkpointX < InitialSpawnX)
+            throw new ArgumentOutOfRangeException(nameof(checkpointX));
+        if (!float.IsFinite(segmentStartX) || segmentStartX < checkpointX)
+            throw new ArgumentOutOfRangeException(nameof(segmentStartX));
+
+        CompletedChapters = completedChapters;
+        CheckpointX = checkpointX;
+        SegmentStartX = segmentStartX;
+    }
+
     public void Reset()
     {
         CompletedChapters = 0;
