@@ -72,7 +72,6 @@ public sealed class Engine : IDisposable
             throw new InvalidOperationException("The engine is already running.");
 
         _isRunning = true;
-        Time.Reset();
 
         var timer = Stopwatch.StartNew();
         var frameTimer = Stopwatch.StartNew();
@@ -126,11 +125,11 @@ public sealed class Engine : IDisposable
         var timer = Stopwatch.StartNew();
         var frameTimer = Stopwatch.StartNew();
         var previousTime = timer.Elapsed.TotalSeconds;
-        var accumulator = 0.0;
+        var loop = new SceneLoop(scene, FixedTimeStep);
 
         try
         {
-            scene.Start();
+            loop.Start();
 
             while (_window.IsOpen)
             {
@@ -140,21 +139,7 @@ public sealed class Engine : IDisposable
                 var currentTime = timer.Elapsed.TotalSeconds;
                 var unscaledDeltaTime = (float)(currentTime - previousTime);
                 previousTime = currentTime;
-                Time.Tick(unscaledDeltaTime);
-
-                accumulator += Time.DeltaTime;
-
-                // alt tab for ten minutes and this stops trying to catch up
-                if (accumulator > 0.25)
-                    accumulator = 0.25;
-
-                while (accumulator >= FixedTimeStep)
-                {
-                    scene.FixedUpdate(FixedTimeStep);
-                    accumulator -= FixedTimeStep;
-                }
-
-                scene.Update(Time.DeltaTime);
+                loop.AdvanceFrame(unscaledDeltaTime);
 
                 if (!_window.IsOpen)
                     break;
@@ -168,6 +153,7 @@ public sealed class Engine : IDisposable
         }
         finally
         {
+            loop.Stop();
             _isRunning = false;
             Shutdown();
         }

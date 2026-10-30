@@ -78,6 +78,7 @@ TestCollisionResolution();
 TestPhysicsQueries();
 TestAnimationClips();
 TestEntityLifecycle();
+TestSceneLoopAndBrowserRenderer();
 TestGameTimer();
 TestLevelLoader();
 TestGameManager();
@@ -239,6 +240,49 @@ static void TestGameTimer()
     Check(!once.Update(1f), "One-shot timer should not fire twice.");
     once.Restart();
     Check(!once.Paused && once.Remaining == 1, "Restart should reset timer state.");
+}
+
+static void TestSceneLoopAndBrowserRenderer()
+{
+    var scene = new Scene();
+    var probe = scene.Spawn("loop-probe").AddComponent<SceneLoopProbe>();
+    var loop = new SceneLoop(scene, fixedTimeStep: 0.1f, maxFrameDelta: 0.25f);
+    loop.Start();
+    loop.AdvanceFrame(0.35f);
+
+    Check(probe.FixedUpdates == 2, "SceneLoop should clamp long frame deltas and run fixed updates.");
+    Check(probe.VariableUpdates == 1, "SceneLoop should run one variable update per frame.");
+    Near(probe.LastDeltaTime, 0.25f, "SceneLoop clamped delta");
+    Near(loop.Interpolation, 0.5f, "SceneLoop interpolation fraction");
+    loop.Stop();
+
+    var renderScene = new Scene();
+    renderScene.Spawn("box", new Vector2(30, 40)).AddComponent(new SpriteRenderer
+    {
+        Size = new Vector2(20, 12),
+        Color = new Color(120, 80, 200),
+    });
+
+    var renderer = Renderer.CreateBrowser(100, 80);
+    renderer.BeginBrowserFrame(Color.Black);
+    renderScene.Draw(renderer);
+    Check(renderer.BrowserCommands.Count == 2, "Browser renderer should collect a clear and sprite-box command.");
+    Check(renderer.BrowserCommands[0].Type == "clear", "Browser renderer should clear each frame.");
+    Check(renderer.BrowserCommands[1].Type == "rectangle", "Browser renderer should preserve scene sprite drawing.");
+    Check(renderer.BrowserCommands[1].Values.SequenceEqual(new float[] { 20, 34, 20, 12 }),
+        "Browser renderer should record the expected centered rectangle.");
+
+    renderer.DrawBrowserText("SIGNAL", new Vector2(10, 12), Color.White, centered: true);
+    renderer.DrawBrowserPolygon(
+        [new Vector2(1, 2), new Vector2(3, 4), new Vector2(5, 6)],
+        Color.Cyan,
+        filled: true,
+        screenSpace: false);
+    Check(renderer.BrowserCommands[2].Type == "text" && renderer.BrowserCommands[2].Text == "SIGNAL",
+        "Browser renderer should preserve text labels for Canvas rendering.");
+    Check(renderer.BrowserCommands[2].ScreenSpace, "Browser HUD commands should opt out of the camera transform.");
+    Check(renderer.BrowserCommands[3].Type == "filled-polygon" && !renderer.BrowserCommands[3].ScreenSpace,
+        "Browser renderer should record filled world-space polygons.");
 }
 
 static void TestLevelLoader()
@@ -473,6 +517,10 @@ static void TestStoryCampaign()
     story.Reset();
     Check(!story.IsComplete && story.CheckpointX == StoryCampaign.InitialSpawnX,
         "Starting a new story should reset chapter and checkpoint progress.");
+
+    story.RestoreProgress(1, firstThreshold, firstThreshold);
+    Check(story.CompletedChapters == 1 && story.Distance(firstThreshold + 50) == StoryCampaign.ChapterLength + 50,
+        "Saved story progress should restore chapter and distance state.");
 }
 
 static void TestPngRoundTrip()
@@ -575,6 +623,21 @@ static void TestDayNightAndLighting()
     // Standalone light test
     scene.Lighting.AddStandaloneLight(new Vector2(50, 50), 80f, Color.Yellow);
     Check(scene.Lighting.Enabled, "Lighting system should remain enabled.");
+}
+
+sealed class SceneLoopProbe : Component
+{
+    public int FixedUpdates { get; private set; }
+    public int VariableUpdates { get; private set; }
+    public float LastDeltaTime { get; private set; }
+
+    public override void OnFixedUpdate(float deltaTime) => FixedUpdates++;
+
+    public override void OnUpdate(float deltaTime)
+    {
+        VariableUpdates++;
+        LastDeltaTime = deltaTime;
+    }
 }
 
 sealed class LifecycleProbe : Component

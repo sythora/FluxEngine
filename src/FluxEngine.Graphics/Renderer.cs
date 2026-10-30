@@ -11,6 +11,9 @@ public sealed class Renderer
 {
     private readonly IntPtr _windowHandle;
     private readonly IntPtr _rendererHandle;
+    private readonly List<BrowserDrawCommand>? _browserCommands;
+    private readonly int _browserWidth;
+    private readonly int _browserHeight;
     private Texture? _radialLightTexture;
     private Texture? _vignetteTexture;
     private IntPtr _lightmapTexture;
@@ -26,6 +29,89 @@ public sealed class Renderer
         SDL.SDL_SetRenderDrawBlendMode(_rendererHandle, SDL.SDL_BlendMode.SDL_BLENDMODE_BLEND);
     }
 
+    private Renderer(int browserWidth, int browserHeight)
+    {
+        if (browserWidth <= 0 || browserHeight <= 0)
+            throw new ArgumentOutOfRangeException(nameof(browserWidth), "Browser renderer dimensions must be positive.");
+
+        _browserWidth = browserWidth;
+        _browserHeight = browserHeight;
+        _browserCommands = [];
+    }
+
+    public static Renderer CreateBrowser(int width, int height) => new(width, height);
+
+    public bool IsBrowserBackend => _browserCommands is not null;
+
+    public IReadOnlyList<BrowserDrawCommand> BrowserCommands
+        => _browserCommands ?? throw new InvalidOperationException("This renderer is not using the browser backend.");
+
+    public void BeginBrowserFrame(Color backgroundColor)
+    {
+        if (_browserCommands is null)
+            throw new InvalidOperationException("This renderer is not using the browser backend.");
+
+        _browserCommands.Clear();
+        _browserCommands.Add(new BrowserDrawCommand("clear", [], backgroundColor, Color.Transparent));
+    }
+
+    public void DrawBrowserRectangle(Rectangle rectangle, Color color, bool outline = false, bool screenSpace = true)
+        => AddBrowserCommand(
+            outline ? "rectangle-outline" : "rectangle",
+            [rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height],
+            color,
+            Color.Transparent,
+            screenSpace: screenSpace);
+
+    public void DrawBrowserCircle(Vector2 center, float radius, Color color, bool outline = false, bool screenSpace = true)
+        => AddBrowserCommand(
+            outline ? "circle-outline" : "circle",
+            [center.X, center.Y, radius],
+            color,
+            Color.Transparent,
+            screenSpace: screenSpace);
+
+    public void DrawBrowserLine(Vector2 from, Vector2 to, Color color, bool screenSpace = true)
+        => AddBrowserCommand("line", [from.X, from.Y, to.X, to.Y], color, Color.Transparent, screenSpace: screenSpace);
+
+    public void DrawBrowserPolygon(IReadOnlyList<Vector2> points, Color color, bool filled = false, bool screenSpace = true)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        if (points.Count < 2)
+            return;
+
+        var coordinates = new float[points.Count * 2];
+        for (var index = 0; index < points.Count; index++)
+        {
+            coordinates[index * 2] = points[index].X;
+            coordinates[index * 2 + 1] = points[index].Y;
+        }
+
+        AddBrowserCommand(filled ? "filled-polygon" : "polygon", coordinates, color, Color.Transparent, screenSpace: screenSpace);
+    }
+
+    public void DrawBrowserText(
+        string text,
+        Vector2 position,
+        Color color,
+        float size = 16,
+        bool centered = false,
+        bool bold = false,
+        bool screenSpace = true)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (!float.IsFinite(size) || size <= 0)
+            throw new ArgumentOutOfRangeException(nameof(size), "Text size must be positive and finite.");
+
+        AddBrowserCommand(
+            "text",
+            [position.X, position.Y, size, centered ? 1 : 0, bold ? 1 : 0],
+            color,
+            Color.Transparent,
+            text,
+            screenSpace: screenSpace);
+    }
+
     // scene sets this every frame
     public Camera? Camera { get; set; }
 
@@ -33,6 +119,12 @@ public sealed class Renderer
 
     public void Clear(Color color)
     {
+        if (_browserCommands is not null)
+        {
+            BeginBrowserFrame(color);
+            return;
+        }
+
         SDL.SDL_SetRenderDrawColor(_rendererHandle, color.R, color.G, color.B, color.A);
         SDL.SDL_RenderClear(_rendererHandle);
     }
@@ -41,6 +133,13 @@ public sealed class Renderer
     {
         if (rectangle.Width <= 0 || rectangle.Height <= 0)
             return;
+
+        if (_browserCommands is not null)
+        {
+            _browserCommands.Add(new BrowserDrawCommand(
+                "rectangle", [rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height], color, Color.Transparent));
+            return;
+        }
 
         var screen = ToScreen(rectangle.Position);
         var sdlRect = new SDL.SDL_Rect
@@ -57,6 +156,13 @@ public sealed class Renderer
 
     public void DrawRectangleOutline(Rectangle rectangle, Color color)
     {
+        if (_browserCommands is not null)
+        {
+            _browserCommands.Add(new BrowserDrawCommand(
+                "rectangle-outline", [rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height], color, Color.Transparent));
+            return;
+        }
+
         var screen = ToScreen(rectangle.Position);
         var sdlRect = new SDL.SDL_Rect
         {
@@ -72,6 +178,13 @@ public sealed class Renderer
 
     public void DrawLine(Vector2 from, Vector2 to, Color color)
     {
+        if (_browserCommands is not null)
+        {
+            _browserCommands.Add(new BrowserDrawCommand(
+                "line", [from.X, from.Y, to.X, to.Y], color, Color.Transparent));
+            return;
+        }
+
         var start = ToScreen(from);
         var end = ToScreen(to);
 
@@ -87,6 +200,14 @@ public sealed class Renderer
     // no SDL shape calls for circles, so this fills one row at a time
     public void DrawCircle(Vector2 center, float radius, Color color)
     {
+        if (_browserCommands is not null)
+        {
+            if (radius > 0)
+                _browserCommands.Add(new BrowserDrawCommand(
+                    "circle", [center.X, center.Y, radius], color, Color.Transparent));
+            return;
+        }
+
         var screen = ToScreen(center);
         var pixelRadius = (int)(radius * Zoom);
 
@@ -112,6 +233,14 @@ public sealed class Renderer
 
     public void DrawCircleOutline(Vector2 center, float radius, Color color, int segments = 32)
     {
+        if (_browserCommands is not null)
+        {
+            if (radius > 0)
+                _browserCommands.Add(new BrowserDrawCommand(
+                    "circle-outline", [center.X, center.Y, radius, segments], color, Color.Transparent));
+            return;
+        }
+
         var screen = ToScreen(center);
         var pixelRadius = (int)(radius * Zoom);
 
@@ -153,6 +282,16 @@ public sealed class Renderer
         Color topColor,
         Color bottomColor)
     {
+        if (_browserCommands is not null)
+        {
+            _browserCommands.Add(new BrowserDrawCommand(
+                "quad-gradient",
+                [topLeft.X, topLeft.Y, topRight.X, topRight.Y, bottomLeft.X, bottomLeft.Y, bottomRight.X, bottomRight.Y],
+                topColor,
+                bottomColor));
+            return;
+        }
+
         var tl = ToScreen(topLeft);
         var tr = ToScreen(topRight);
         var br = ToScreen(bottomRight);
@@ -243,6 +382,19 @@ public sealed class Renderer
         if (points.Count < 2)
             return;
 
+        if (_browserCommands is not null)
+        {
+            var coordinates = new float[points.Count * 2];
+            for (var index = 0; index < points.Count; index++)
+            {
+                coordinates[index * 2] = points[index].X;
+                coordinates[index * 2 + 1] = points[index].Y;
+            }
+
+            _browserCommands.Add(new BrowserDrawCommand("polygon", coordinates, color, Color.Transparent));
+            return;
+        }
+
         SetColor(color);
 
         for (var i = 0; i < points.Count; i++)
@@ -272,6 +424,9 @@ public sealed class Renderer
         if (source.Width <= 0 || source.Height <= 0 ||
             destination.Width <= 0 || destination.Height <= 0)
             return;
+
+        if (_browserCommands is not null)
+            throw new PlatformNotSupportedException("Browser renderer texture drawing is not implemented yet.");
 
         var screen = ToScreen(destination.Position);
 
@@ -315,6 +470,9 @@ public sealed class Renderer
 
         if (texture is null)
             return;
+
+        if (_browserCommands is not null)
+            throw new PlatformNotSupportedException("Browser renderer sprite drawing is not implemented yet.");
 
         var drawScale = (scale ?? Vector2.One) * Zoom;
         var source = sprite.Source ?? texture.Bounds;
@@ -373,6 +531,8 @@ public sealed class Renderer
     // paths end up as one SDL texture with alpha blending enabled.
     public Texture LoadTexture(string path)
     {
+        EnsureNativeBackend("Texture loading");
+
         if (!File.Exists(path))
             throw new FileNotFoundException($"No texture at '{path}'.", path);
 
@@ -399,6 +559,8 @@ public sealed class Renderer
 
     public Texture LoadTextureFromMemory(ReadOnlySpan<byte> data, string name = "texture")
     {
+        EnsureNativeBackend("Texture loading");
+
         if (data.IsEmpty)
             throw new ArgumentException("Texture data is empty.", nameof(data));
 
@@ -422,6 +584,8 @@ public sealed class Renderer
     // raw RGBA pixels, top row first. used by PNG decoding and generated fonts
     public Texture CreateTextureFromPixels(byte[] rgba, int width, int height, string name = "texture")
     {
+        EnsureNativeBackend("Texture creation");
+
         ArgumentNullException.ThrowIfNull(rgba);
         if (width <= 0)
             throw new ArgumentOutOfRangeException(nameof(width), "Width must be positive.");
@@ -469,6 +633,7 @@ public sealed class Renderer
     public void SaveScreenshot(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        EnsureNativeBackend("Saving screenshots");
 
         if (SDL.SDL_GetRendererOutputSize(_rendererHandle, out var width, out var height) != 0)
             throw new InvalidOperationException($"Couldn't read renderer size: {SDL.SDL_GetError()}");
@@ -514,6 +679,7 @@ public sealed class Renderer
     }
 
     public bool SupportsLighting =>
+        _browserCommands is null &&
         _rendererHandle != IntPtr.Zero &&
         SDL.SDL_RenderTargetSupported(_rendererHandle) == SDL.SDL_bool.SDL_TRUE;
 
@@ -704,8 +870,31 @@ public sealed class Renderer
         if (Camera is null)
             return world;
 
-        SDL.SDL_GetWindowSize(_windowHandle, out var width, out var height);
+        var width = _browserWidth;
+        var height = _browserHeight;
+        if (_browserCommands is null)
+            SDL.SDL_GetWindowSize(_windowHandle, out width, out height);
         return Camera.WorldToScreen(world, width, height);
+    }
+
+    private void EnsureNativeBackend(string operation)
+    {
+        if (_browserCommands is not null)
+            throw new PlatformNotSupportedException($"{operation} is not available on the browser renderer yet.");
+    }
+
+    private void AddBrowserCommand(
+        string type,
+        float[] values,
+        Color color,
+        Color secondaryColor,
+        string? text = null,
+        bool screenSpace = false)
+    {
+        if (_browserCommands is null)
+            throw new PlatformNotSupportedException("Browser-only drawing commands require the browser renderer.");
+
+        _browserCommands.Add(new BrowserDrawCommand(type, values, color, secondaryColor, text, screenSpace));
     }
 
     private void SetColor(Color color)
