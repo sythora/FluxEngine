@@ -12,11 +12,14 @@ public sealed class Engine : IDisposable
     private readonly Window _window;
     private bool _isRunning;
     private AudioManager? _audio;
+    private EngineSettings _settings = new();
 
     public Engine(string title = "FluxEngine", int width = 1280, int height = 720)
     {
+        _settings = EngineSettings.Load();
         Current = this;
-        _window = new Window(title, width, height);
+        _window = new Window(title, width, height, _settings.Vsync);
+        _settings.Changed += OnSettingsChanged;
     }
 
     // so components can grab input and shutdown without being handed the engine
@@ -26,13 +29,27 @@ public sealed class Engine : IDisposable
     public InputManager Input => _window.Input;
     public InputActions Actions => _window.Input.Actions;
     public Renderer Renderer => _window.Renderer;
-    public EngineSettings Settings { get; set; } = EngineSettings.Load();
+    public EngineSettings Settings
+    {
+        get => _settings;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (ReferenceEquals(_settings, value))
+                return;
+
+            _settings.Changed -= OnSettingsChanged;
+            _settings = value;
+            _settings.Changed += OnSettingsChanged;
+            ApplySettings();
+        }
+    }
 
     // texture cache, shared by everything
     public AssetManager Assets { get; } = new();
 
     // audio init happens the first time you touch this
-    public AudioManager Audio => _audio ??= new AudioManager();
+    public AudioManager Audio => _audio ??= CreateAudioManager();
 
     public float TimeScale
     {
@@ -58,12 +75,14 @@ public sealed class Engine : IDisposable
         Time.Reset();
 
         var timer = Stopwatch.StartNew();
+        var frameTimer = Stopwatch.StartNew();
         var previousTime = timer.Elapsed.TotalSeconds;
 
         try
         {
             while (_window.IsOpen)
             {
+                frameTimer.Restart();
                 _window.BeginFrame();
 
                 var currentTime = timer.Elapsed.TotalSeconds;
@@ -81,6 +100,8 @@ public sealed class Engine : IDisposable
                     render();
                     _window.Present();
                 }
+
+                LimitFrameRate(frameTimer);
             }
         }
         finally
@@ -103,6 +124,7 @@ public sealed class Engine : IDisposable
         Time.Reset();
 
         var timer = Stopwatch.StartNew();
+        var frameTimer = Stopwatch.StartNew();
         var previousTime = timer.Elapsed.TotalSeconds;
         var accumulator = 0.0;
 
@@ -112,6 +134,7 @@ public sealed class Engine : IDisposable
 
             while (_window.IsOpen)
             {
+                frameTimer.Restart();
                 _window.BeginFrame();
 
                 var currentTime = timer.Elapsed.TotalSeconds;
@@ -140,6 +163,7 @@ public sealed class Engine : IDisposable
                 _window.Clear(background.R, background.G, background.B);
                 scene.Draw(_window.Renderer);
                 _window.Present();
+                LimitFrameRate(frameTimer);
             }
         }
         finally
@@ -151,8 +175,50 @@ public sealed class Engine : IDisposable
 
     public void Shutdown() => _window.Close();
 
+    private AudioManager CreateAudioManager()
+    {
+        var audio = new AudioManager
+        {
+            MasterVolume = Settings.MasterVolume,
+            SfxVolume = Settings.SfxVolume,
+            MusicVolume = Settings.MusicVolume,
+        };
+        return audio;
+    }
+
+    private void LimitFrameRate(Stopwatch frameTimer)
+    {
+        if (_window.IsVSyncEnabled || Settings.TargetFps <= 0)
+            return;
+
+        var targetFrameSeconds = 1d / Settings.TargetFps;
+        var remaining = targetFrameSeconds - frameTimer.Elapsed.TotalSeconds;
+        if (remaining > 0)
+            Thread.Sleep(TimeSpan.FromSeconds(remaining));
+    }
+
+    private void OnSettingsChanged(EngineSettings settings)
+    {
+        if (ReferenceEquals(settings, _settings))
+            ApplySettings();
+    }
+
+    private void ApplySettings()
+    {
+        if (_window.IsOpen)
+            _window.SetVSync(Settings.Vsync);
+
+        if (_audio is not null)
+        {
+            _audio.MasterVolume = Settings.MasterVolume;
+            _audio.SfxVolume = Settings.SfxVolume;
+            _audio.MusicVolume = Settings.MusicVolume;
+        }
+    }
+
     public void Dispose()
     {
+        _settings.Changed -= OnSettingsChanged;
         _audio?.Dispose();
         Shutdown();
         GC.SuppressFinalize(this);

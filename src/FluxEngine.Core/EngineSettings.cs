@@ -10,7 +10,11 @@ public sealed class EngineSettings
         PropertyNameCaseInsensitive = true,
     };
 
-    // Graphics Settings ("GTA 6 Mode")
+    private int _targetFps = 60;
+    private float _masterVolume = 1f;
+    private float _sfxVolume = 1f;
+    private float _musicVolume = 0.8f;
+
     public bool EnableLighting { get; set; } = true;
     public bool EnableVignette { get; set; } = true;
     public bool EnableGodRays { get; set; } = true;
@@ -20,12 +24,30 @@ public sealed class EngineSettings
 
     // Display & Performance
     public bool Vsync { get; set; } = true;
-    public int TargetFps { get; set; } = 60;
+    public int TargetFps
+    {
+        get => _targetFps;
+        set => _targetFps = Math.Clamp(value, 0, 1000);
+    }
 
     // Audio
-    public float MasterVolume { get; set; } = 1.0f;
-    public float SfxVolume { get; set; } = 1.0f;
-    public float MusicVolume { get; set; } = 0.8f;
+    public float MasterVolume
+    {
+        get => _masterVolume;
+        set => _masterVolume = NormalizeVolume(value);
+    }
+
+    public float SfxVolume
+    {
+        get => _sfxVolume;
+        set => _sfxVolume = NormalizeVolume(value);
+    }
+
+    public float MusicVolume
+    {
+        get => _musicVolume;
+        set => _musicVolume = NormalizeVolume(value);
+    }
 
     public event Action<EngineSettings>? Changed;
 
@@ -33,6 +55,9 @@ public sealed class EngineSettings
     {
         Changed?.Invoke(this);
     }
+
+    private static float NormalizeVolume(float value)
+        => float.IsFinite(value) ? Math.Clamp(value, 0f, 1f) : 0f;
 
     public static EngineSettings Load(string path = "settings.json")
     {

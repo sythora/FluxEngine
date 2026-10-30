@@ -11,6 +11,25 @@ public sealed class GameUI : Component
 {
     private readonly BitmapFont _font;
     private readonly InputActions _actions;
+    private readonly EngineSettings _settings;
+    private int _selectedSetting;
+    private bool _showSettings;
+    private const int SaveSettingIndex = 11;
+    private static readonly string[] SettingLabels =
+    [
+        "LIGHTING",
+        "VIGNETTE",
+        "GOD RAYS",
+        "ATMOSPHERIC PARTICLES",
+        "FOG",
+        "SCREEN SHAKE",
+        "MASTER VOLUME",
+        "SFX VOLUME",
+        "MUSIC VOLUME",
+        "VSYNC",
+        "FRAME RATE LIMIT",
+        "SAVE AND RETURN",
+    ];
 
     public int Score { get; set; }
     public float Distance { get; set; }
@@ -23,21 +42,64 @@ public sealed class GameUI : Component
     private bool _gameOver;
     private float _flashTimer;
 
-    public GameUI(InputActions actions, BitmapFont font)
+    public GameUI(InputActions actions, BitmapFont font, EngineSettings settings)
     {
         ArgumentNullException.ThrowIfNull(font);
+        ArgumentNullException.ThrowIfNull(settings);
         _actions = actions;
         _font = font;
+        _settings = settings;
     }
 
     public bool IsPaused => _paused;
     public bool IsGameOver => _gameOver;
     public bool IsStartScreen => _showStart;
+    public bool IsSaveSettingSelected => _selectedSetting == SaveSettingIndex;
 
     public void StartGame() => _showStart = false;
     public void Pause() => _paused = true;
     public void Resume() => _paused = false;
     public void GameOver() => _gameOver = true;
+    public void OpenSettings() => _showSettings = true;
+    public void CloseSettings() => _showSettings = false;
+
+    public void MoveSettingsSelection(int direction)
+    {
+        _selectedSetting = (_selectedSetting + direction + SettingLabels.Length) % SettingLabels.Length;
+    }
+
+    public void AdjustSelectedSetting(EngineSettings settings, int direction)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (direction == 0)
+            return;
+
+        switch (_selectedSetting)
+        {
+            case 0: settings.EnableLighting = !settings.EnableLighting; break;
+            case 1: settings.EnableVignette = !settings.EnableVignette; break;
+            case 2: settings.EnableGodRays = !settings.EnableGodRays; break;
+            case 3: settings.EnableAtmosphericParticles = !settings.EnableAtmosphericParticles; break;
+            case 4: settings.EnableFog = !settings.EnableFog; break;
+            case 5: settings.EnableScreenShake = !settings.EnableScreenShake; break;
+            case 6: settings.MasterVolume += direction * 0.1f; break;
+            case 7: settings.SfxVolume += direction * 0.1f; break;
+            case 8: settings.MusicVolume += direction * 0.1f; break;
+            case 9: settings.Vsync = !settings.Vsync; break;
+            case 10:
+                int[] frameRates = [30, 60, 120, 0];
+                var frameRateIndex = Array.IndexOf(frameRates, settings.TargetFps);
+                if (frameRateIndex < 0)
+                    frameRateIndex = 1;
+                else
+                    frameRateIndex = (frameRateIndex + Math.Sign(direction) + frameRates.Length) % frameRates.Length;
+                settings.TargetFps = frameRates[frameRateIndex];
+                break;
+        }
+
+        settings.NotifyChanged();
+    }
+
     public void Reset()
     {
         _showStart = false;
@@ -58,6 +120,12 @@ public sealed class GameUI : Component
     {
         // HUD is drawn in screen coordinates (no camera)
         renderer.Camera = null;
+
+        if (_showSettings)
+        {
+            DrawSettingsScreen(renderer);
+            return;
+        }
 
         if (!_showStart && !_gameOver && !_paused)
         {
@@ -119,6 +187,10 @@ public sealed class GameUI : Component
         var hintWidth = _font.MeasureWidth(hint, 1.6f);
         _font.Draw(renderer, hint, new Vector2(480 - hintWidth / 2, 430), Color.White, 1.6f);
 
+        var settingsHint = "PRESS O OR GAMEPAD Y FOR SETTINGS";
+        var settingsHintWidth = _font.MeasureWidth(settingsHint, 1.4f);
+        _font.Draw(renderer, settingsHint, new Vector2(480 - settingsHintWidth / 2, 470), new Color(255, 218, 150), 1.4f);
+
         var controls = "A/D MOVE  SPACE/A JUMP  ESC/START PAUSE  R RESTART";
         var ctrlWidth = _font.MeasureWidth(controls, 1.4f);
         _font.Draw(renderer, controls, new Vector2(480 - ctrlWidth / 2, 510), new Color(185, 220, 255), 1.4f);
@@ -135,7 +207,59 @@ public sealed class GameUI : Component
         var hint = "PRESS ESC OR GAMEPAD START TO RESUME";
         var hintWidth = _font.MeasureWidth(hint, 1.6f);
         _font.Draw(renderer, hint, new Vector2(480 - hintWidth / 2, 370), Color.White, 1.6f);
+
+        var settingsHint = "PRESS O OR GAMEPAD Y FOR SETTINGS";
+        var settingsHintWidth = _font.MeasureWidth(settingsHint, 1.4f);
+        _font.Draw(renderer, settingsHint, new Vector2(480 - settingsHintWidth / 2, 415), new Color(255, 218, 150), 1.4f);
     }
+
+    private void DrawSettingsScreen(Renderer renderer)
+    {
+        renderer.DrawRectangle(new Rectangle(0, 0, 960, 720), new Color(8, 12, 24, 238));
+        renderer.DrawRectangle(new Rectangle(90, 58, 780, 604), new Color(20, 32, 54, 250));
+        renderer.DrawRectangleOutline(new Rectangle(90, 58, 780, 604), new Color(100, 150, 210));
+
+        var title = "SETTINGS";
+        var titleWidth = _font.MeasureWidth(title, 3f);
+        _font.Draw(renderer, title, new Vector2(480 - titleWidth / 2, 82), Color.White, 3f);
+
+        for (var index = 0; index < SettingLabels.Length; index++)
+        {
+            var y = 160 + index * 34;
+            var selected = index == _selectedSetting;
+            if (selected)
+                renderer.DrawRectangle(new Rectangle(122, y - 5, 716, 30), new Color(62, 92, 130, 230));
+
+            var color = selected ? new Color(255, 224, 150) : new Color(220, 232, 248);
+            _font.Draw(renderer, SettingLabels[index], new Vector2(138, y), color, 1.5f);
+            _font.Draw(renderer, GetSettingValue(index), new Vector2(690, y), color, 1.5f);
+        }
+
+        _font.Draw(renderer, "UP/DOWN SELECT  LEFT/RIGHT CHANGE", new Vector2(168, 590), Color.White, 1.25f);
+        _font.Draw(renderer, "ENTER/A SELECT  ESC/B BACK (NO SAVE)", new Vector2(145, 615), new Color(185, 220, 255), 1.25f);
+        _font.Draw(renderer, "FPS LIMIT IS USED ONLY WHEN VSYNC IS OFF", new Vector2(162, 640), new Color(185, 220, 255), 1.15f);
+    }
+
+    private string GetSettingValue(int index)
+    {
+        return index switch
+        {
+            0 => OnOff(_settings.EnableLighting),
+            1 => OnOff(_settings.EnableVignette),
+            2 => OnOff(_settings.EnableGodRays),
+            3 => OnOff(_settings.EnableAtmosphericParticles),
+            4 => OnOff(_settings.EnableFog),
+            5 => OnOff(_settings.EnableScreenShake),
+            6 => $"{_settings.MasterVolume * 100:000}%",
+            7 => $"{_settings.SfxVolume * 100:000}%",
+            8 => $"{_settings.MusicVolume * 100:000}%",
+            9 => OnOff(_settings.Vsync),
+            10 => _settings.TargetFps == 0 ? "UNLIMITED" : $"{_settings.TargetFps} FPS",
+            _ => "ENTER",
+        };
+    }
+
+    private static string OnOff(bool value) => value ? "ON" : "OFF";
 
     private void DrawGameOverScreen(Renderer renderer)
     {

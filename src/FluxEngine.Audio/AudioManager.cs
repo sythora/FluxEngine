@@ -5,8 +5,13 @@ using FluxEngine.Core;
 
 namespace FluxEngine.Audio;
 
-// one device, one callback, a dumb mixer that adds floats together. plays
-// queue up behind each other instead of layering, which is fine for a jam
+public enum AudioBus
+{
+    Sfx,
+    Music,
+}
+
+// One device and callback; sounds queue instead of playing simultaneously.
 public sealed class AudioManager : IDisposable
 {
     private readonly List<Playback> _playing = [];
@@ -18,6 +23,9 @@ public sealed class AudioManager : IDisposable
     private byte[] _writeBuffer = [];
     private uint _device;
     private bool _disposed;
+    private float _masterVolume = 1f;
+    private float _sfxVolume = 1f;
+    private float _musicVolume = 1f;
 
     public AudioManager()
     {
@@ -29,6 +37,23 @@ public sealed class AudioManager : IDisposable
 
     public bool IsAvailable => _device != 0;
     public bool IsPaused { get; private set; }
+    public float MasterVolume
+    {
+        get => _masterVolume;
+        set => _masterVolume = NormalizeVolume(value);
+    }
+
+    public float SfxVolume
+    {
+        get => _sfxVolume;
+        set => _sfxVolume = NormalizeVolume(value);
+    }
+
+    public float MusicVolume
+    {
+        get => _musicVolume;
+        set => _musicVolume = NormalizeVolume(value);
+    }
 
     // device stays closed until the first sound loads, so it can match the
     // file format exactly and skip converting that one
@@ -78,20 +103,20 @@ public sealed class AudioManager : IDisposable
     }
 
     // volume 0..1, loop keeps it going forever
-    public void Play(Sound sound, float volume = 1f, bool loop = false)
+    public void Play(Sound sound, float volume = 1f, bool loop = false, AudioBus bus = AudioBus.Sfx)
     {
         ArgumentNullException.ThrowIfNull(sound);
 
         if (_device == 0)
             return;
 
-        volume = Math.Clamp(volume, 0, 1);
+        volume = NormalizeVolume(volume);
 
         if (volume <= 0)
             return;
 
         lock (_lock)
-            _playing.Add(new Playback(sound, volume, loop));
+            _playing.Add(new Playback(sound, volume, loop, bus));
     }
 
     public void StopAll()
@@ -186,9 +211,11 @@ public sealed class AudioManager : IDisposable
                 var frames = Math.Min(frameCount - mixedFrames, available);
                 var sourceIndex = playback.Frame * channels;
                 var targetIndex = mixedFrames * channels;
+                var busVolume = playback.Bus == AudioBus.Music ? MusicVolume : SfxVolume;
+                var volume = playback.Volume * MasterVolume * busVolume;
 
                 for (var i = 0; i < frames * channels; i++)
-                    _mixBuffer[targetIndex + i] += playback.Samples[sourceIndex + i] * playback.Volume;
+                    _mixBuffer[targetIndex + i] += playback.Samples[sourceIndex + i] * volume;
 
                 playback.Frame += frames;
                 mixedFrames += frames;
@@ -214,6 +241,9 @@ public sealed class AudioManager : IDisposable
         if (_writeBuffer.Length < byteCount)
             _writeBuffer = new byte[byteCount];
     }
+
+    private static float NormalizeVolume(float value)
+        => float.IsFinite(value) ? Math.Clamp(value, 0f, 1f) : 0f;
 
     private void WriteSamples(IntPtr stream, int sampleCount, int bytesPerSample)
     {
@@ -330,12 +360,13 @@ public sealed class AudioManager : IDisposable
             BinaryPrimitives.WriteInt32BigEndian(data.AsSpan(offset, 4), value);
     }
 
-    private sealed class Playback(Sound sound, float volume, bool loop)
+    private sealed class Playback(Sound sound, float volume, bool loop, AudioBus bus)
     {
         public float[] Samples { get; } = sound.Samples;
         public int Frames { get; } = sound.Frames;
         public float Volume { get; } = volume;
         public bool Loop { get; } = loop;
+        public AudioBus Bus { get; } = bus;
         public int Frame;
     }
 }

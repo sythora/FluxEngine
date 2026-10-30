@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using SDL2;
+using FluxEngine.Core;
 using FluxEngine.Graphics;
 using FluxEngine.Input;
 
@@ -22,16 +23,20 @@ public sealed class Window : IDisposable
     [DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
     private static extern int SDL_JoystickRumble(IntPtr joystick, ushort low_frequency_rumble, ushort high_frequency_rumble, uint duration_ms);
 
+    [DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
+    private static extern int SDL_RenderSetVSync(IntPtr renderer, int vsync);
+
     private IntPtr _handle;
     private IntPtr _renderer;
     private bool _isOpen;
     private bool _sdlInitialized;
+    private bool _vsyncEnabled;
     private readonly Dictionary<int, IntPtr> _gamepadHandles = [];
     private readonly Dictionary<int, IntPtr> _hapticHandles = [];
     private int _width;
     private int _height;
 
-    public Window(string title = "FluxEngine", int width = 1280, int height = 720)
+    public Window(string title = "FluxEngine", int width = 1280, int height = 720, bool vsync = true)
     {
         if (width <= 0)
             throw new ArgumentOutOfRangeException(nameof(width), "Window width must be positive.");
@@ -41,7 +46,7 @@ public sealed class Window : IDisposable
         _width = width;
         _height = height;
         Input = new InputManager();
-        Initialize(title, width, height);
+        Initialize(title, width, height, vsync);
     }
 
     public InputManager Input { get; }
@@ -53,6 +58,7 @@ public sealed class Window : IDisposable
     public bool IsOpen => _isOpen;
     public int Width => _width;
     public int Height => _height;
+    public bool IsVSyncEnabled => _vsyncEnabled;
 
     public bool IsFullscreen
     {
@@ -163,6 +169,31 @@ public sealed class Window : IDisposable
         CheckSdlResult(SDL.SDL_SetWindowFullscreen(_handle, (uint)flags), "toggle fullscreen");
     }
 
+    public bool SetVSync(bool enabled)
+    {
+        EnsureOpen();
+
+        if (_vsyncEnabled == enabled)
+            return true;
+
+        try
+        {
+            if (SDL_RenderSetVSync(_renderer, enabled ? 1 : 0) != 0)
+            {
+                Log.Warn($"Couldn't change VSync: {SDL.SDL_GetError()}");
+                return false;
+            }
+        }
+        catch (EntryPointNotFoundException exception)
+        {
+            Log.Warn($"This SDL2 version does not support changing VSync at runtime: {exception.Message}");
+            return false;
+        }
+
+        _vsyncEnabled = enabled;
+        return true;
+    }
+
     public void Present()
     {
         EnsureOpen();
@@ -207,7 +238,7 @@ public sealed class Window : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    private void Initialize(string title, int width, int height)
+    private void Initialize(string title, int width, int height, bool vsync)
     {
         SDL.SDL_SetHint(SDL.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
         SDL.SDL_SetHint("SDL_JOYSTICK_RAWINPUT", "0");
@@ -235,37 +266,22 @@ public sealed class Window : IDisposable
             if (_handle == IntPtr.Zero)
                 throw new InvalidOperationException($"Failed to create SDL2 window: {SDL.SDL_GetError()}");
 
-            _renderer = SDL.SDL_CreateRenderer(
-                _handle,
-                -1,
-                SDL.SDL_RendererFlags.SDL_RENDERER_ACCELERATED |
-                SDL.SDL_RendererFlags.SDL_RENDERER_PRESENTVSYNC |
-                SDL.SDL_RendererFlags.SDL_RENDERER_TARGETTEXTURE);
-
-            if (_renderer == IntPtr.Zero)
-            {
-                _renderer = SDL.SDL_CreateRenderer(
-                    _handle,
-                    -1,
+            var vsyncFlag = vsync ? SDL.SDL_RendererFlags.SDL_RENDERER_PRESENTVSYNC : 0;
+            if (!TryCreateRenderer(
                     SDL.SDL_RendererFlags.SDL_RENDERER_ACCELERATED |
-                    SDL.SDL_RendererFlags.SDL_RENDERER_PRESENTVSYNC);
-            }
-
-            if (_renderer == IntPtr.Zero)
-            {
-                _renderer = SDL.SDL_CreateRenderer(
-                    _handle,
-                    -1,
+                    vsyncFlag |
+                    SDL.SDL_RendererFlags.SDL_RENDERER_TARGETTEXTURE,
+                    vsync) &&
+                !TryCreateRenderer(
+                    SDL.SDL_RendererFlags.SDL_RENDERER_ACCELERATED | vsyncFlag,
+                    vsync) &&
+                !TryCreateRenderer(
                     SDL.SDL_RendererFlags.SDL_RENDERER_SOFTWARE |
-                    SDL.SDL_RendererFlags.SDL_RENDERER_TARGETTEXTURE);
-            }
-
-            if (_renderer == IntPtr.Zero)
+                    SDL.SDL_RendererFlags.SDL_RENDERER_TARGETTEXTURE,
+                    false) &&
+                !TryCreateRenderer(SDL.SDL_RendererFlags.SDL_RENDERER_SOFTWARE, false))
             {
-                _renderer = SDL.SDL_CreateRenderer(
-                    _handle,
-                    -1,
-                    SDL.SDL_RendererFlags.SDL_RENDERER_SOFTWARE);
+                throw new InvalidOperationException($"Failed to create SDL2 renderer: {SDL.SDL_GetError()}");
             }
 
             if (_renderer == IntPtr.Zero)
@@ -273,6 +289,8 @@ public sealed class Window : IDisposable
 
             Renderer = new Renderer(_handle, _renderer);
             _isOpen = true;
+            if (_vsyncEnabled != vsync)
+                SetVSync(vsync);
             Input.SetFocus(true);
             SDL.SDL_GameControllerEventState(SDL.SDL_ENABLE);
             for (var deviceIndex = 0; deviceIndex < SDL.SDL_NumJoysticks(); deviceIndex++)
@@ -282,6 +300,16 @@ public sealed class Window : IDisposable
         {
             Close();
             throw;
+        }
+
+        bool TryCreateRenderer(SDL.SDL_RendererFlags flags, bool hasVsync)
+        {
+            _renderer = SDL.SDL_CreateRenderer(_handle, -1, flags);
+            if (_renderer == IntPtr.Zero)
+                return false;
+
+            _vsyncEnabled = hasVsync;
+            return true;
         }
     }
 

@@ -1,7 +1,7 @@
 # Audio
 
-Loading WAV files and playing them. One sound at a time, queued up. No fancy
-mixing, no 3D audio, just bangs and bloops.
+Loading WAV files and playing them. Sounds are queued and play one at a time;
+there is no simultaneous mixing or 3D audio yet.
 
 ## Loading
 
@@ -20,12 +20,20 @@ engine.Audio.Play(jumpSound, volume: 0.8f, loop: false);
 
 - `volume` is 0 to 1
 - `loop` makes it repeat forever until you call `StopAll`
+- `bus` is `AudioBus.Sfx` by default; use `AudioBus.Music` for music playback
 
 ```csharp
+engine.Audio.Play(music, volume: 0.8f, loop: true, bus: AudioBus.Music);
+engine.Audio.MasterVolume = 0.8f;
+engine.Audio.SfxVolume = 0.9f;
+engine.Audio.MusicVolume = 0.5f;
 engine.Audio.StopAll();
 engine.Audio.SetPaused(true); // pause everything
 engine.Audio.SetPaused(false);
 ```
+
+Master, SFX, and music volume are multiplied into the output mix and can be
+changed while a sound is playing.
 
 ## Formats
 

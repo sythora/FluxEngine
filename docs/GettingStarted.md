@@ -62,9 +62,14 @@ dotnet run --project demos/FluxEngine.Demo
 SDL2 has to be findable as `SDL2.dll`. On Windows put it next to the exe or
 somewhere on PATH. If the window never opens, that's almost always why.
 
-## Controls in the demo
+## FluxRunner demo controls
 
-- WASD - move
-- Space - drop a ball
-- Left click - shake camera
-- Escape - quit
+- A/D or Left/Right - move
+- Space/Up or gamepad A - jump and double jump
+- Escape or gamepad Start - pause/resume
+- O or gamepad Y - open settings from the start/pause screen
+- R - restart after game over
+- F3 - toggle the debug overlay
+
+The settings screen can save graphics, audio, VSync, and frame-rate options to
+`settings.json`. See [Settings.md](Settings.md).

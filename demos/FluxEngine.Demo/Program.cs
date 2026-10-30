@@ -13,6 +13,7 @@ const int viewHeight = 720;
 var screenshotPath = GetOption(args, "--screenshot");
 var screenshotFrame = GetIntOption(args, "--frame", 90);
 var inMenu = HasFlag(args, "--menu");
+var inSettings = HasFlag(args, "--settings");
 var renderedFrames = 0;
 var screenshotTaken = false;
 
@@ -95,7 +96,7 @@ generatorEnt.AddComponent(generator);
 // its camera-free drawing cannot affect world rendering.
 var hudFont = BuiltInFonts.Load(engine.Renderer, BuiltInFont.PressStart2P);
 var smallFont = BuiltInFonts.Load(engine.Renderer, BuiltInFont.Silkscreen);
-var ui = new GameUI(engine.Input.Actions, hudFont)
+var ui = new GameUI(engine.Input.Actions, hudFont, engine.Settings)
 {
     DayNight = scene.Lighting.DayNight,
 };
@@ -133,6 +134,7 @@ fog.Alpha = 0.4f;
 // ---------------------------------------------------------------------------
 
 var state = 0; // 0=StartMenu, 1=Playing, 2=Paused, 3=GameOver
+var returnState = 0;
 var debugOverlay = new DebugOverlay(engine.Input.Actions);
 var score = 0;
 var bestDistance = 0f;
@@ -146,7 +148,7 @@ scene.Solids.Add(new BoxCollider(new Vector2(-40, 360), new Vector2(40, 2000)));
 
 // Start music (loops, safe if no audio device)
 if (music is not null)
-    engine.Audio.Play(music, volume: 0.4f, loop: true);
+    engine.Audio.Play(music, volume: 0.4f, loop: true, bus: AudioBus.Music);
 
 // Input bindings
 var actions = engine.Input.Actions;
@@ -162,6 +164,8 @@ actions.Bind("pause", Key.Escape);
 actions.BindGamepadButton("pause", GamepadButton.Start);
 actions.Bind("restart", Key.R, Key.Space, Key.Enter);
 actions.BindGamepadButton("restart", GamepadButton.Y, GamepadButton.A, GamepadButton.Start);
+actions.Bind("settings", Key.O);
+actions.BindGamepadButton("settings", GamepadButton.Y);
 
 var respawnCooldown = 0f;
 
@@ -211,8 +215,13 @@ void RestartGame()
 // Start all components' OnStart callbacks
 scene.Start();
 
-// Screenshot mode jumps straight into a run so README/CI images have gameplay
-if (screenshotPath is not null && !inMenu)
+// Screenshot flags make the start, settings, and gameplay screens reproducible.
+if (screenshotPath is not null && inSettings)
+{
+    state = 4;
+    ui.OpenSettings();
+}
+else if (screenshotPath is not null && !inMenu)
 {
     state = 1;
     ui.StartGame();
@@ -258,8 +267,65 @@ engine.Run(
         // Save settings
         if (engine.Input.WasKeyPressed(Key.F5))
         {
-            engine.Settings.Save();
-            Log.Info("Settings saved.");
+            if (engine.Settings.Save())
+                Log.Info("Settings saved.");
+        }
+
+        if ((state is 0 or 1 or 2) && actions.WasPressed("settings"))
+        {
+            returnState = state;
+            state = 4;
+            ui.OpenSettings();
+        }
+
+        if (state == 4)
+        {
+            var gamepad = engine.Input.FirstGamepad;
+            if (engine.Input.WasKeyPressed(Key.Escape) || gamepad?.WasButtonPressed(GamepadButton.B) == true)
+            {
+                ui.CloseSettings();
+                state = returnState;
+                return;
+            }
+
+            if (engine.Input.WasKeyPressed(Key.Up) || gamepad?.WasButtonPressed(GamepadButton.DPadUp) == true)
+                ui.MoveSettingsSelection(-1);
+            if (engine.Input.WasKeyPressed(Key.Down) || gamepad?.WasButtonPressed(GamepadButton.DPadDown) == true)
+                ui.MoveSettingsSelection(1);
+
+            var adjustment = 0;
+            if (engine.Input.WasKeyPressed(Key.Left) || gamepad?.WasButtonPressed(GamepadButton.DPadLeft) == true)
+                adjustment = -1;
+            if (engine.Input.WasKeyPressed(Key.Right) || gamepad?.WasButtonPressed(GamepadButton.DPadRight) == true)
+                adjustment = 1;
+
+            if (adjustment != 0)
+            {
+                ui.AdjustSelectedSetting(engine.Settings, adjustment);
+                ApplyRuntimeSettings();
+            }
+
+            if (engine.Input.WasKeyPressed(Key.Enter) ||
+                engine.Input.WasKeyPressed(Key.Space) ||
+                gamepad?.WasButtonPressed(GamepadButton.A) == true)
+            {
+                if (ui.IsSaveSettingSelected)
+                {
+                    if (engine.Settings.Save())
+                    {
+                        Log.Info("Settings saved.");
+                        ui.CloseSettings();
+                        state = returnState;
+                    }
+                }
+                else
+                {
+                    ui.AdjustSelectedSetting(engine.Settings, 1);
+                    ApplyRuntimeSettings();
+                }
+            }
+
+            return;
         }
 
         if (state == 0 && actions.WasPressed("jump"))
@@ -452,6 +518,11 @@ static void DrawGamepadStatus(Renderer renderer, BitmapFont font, GamepadDevice?
     font.Draw(renderer,
         $"STICK X {gamepad.GetAxis(GamepadAxis.LeftX):0.00}  A {(gamepad.IsButtonDown(GamepadButton.A) ? "DOWN" : "UP")}  B {(gamepad.IsButtonDown(GamepadButton.B) ? "DOWN" : "UP")}",
         new Vector2(22, 676), new Color(230, 240, 255), 1.1f);
+}
+
+void ApplyRuntimeSettings()
+{
+    engine.Settings.NotifyChanged();
 }
 
 static string? GetOption(string[] arguments, string name)

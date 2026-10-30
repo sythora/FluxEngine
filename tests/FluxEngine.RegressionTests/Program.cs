@@ -80,6 +80,7 @@ TestEntityLifecycle();
 TestGameTimer();
 TestLevelLoader();
 TestGameManager();
+TestEngineSettings();
 TestPngRoundTrip();
 TestBuiltInFontMaps();
 TestDayNightAndLighting();
@@ -302,6 +303,58 @@ static void TestGameManager()
 }
 
 static string TempPath(string extension) => Path.Combine(Path.GetTempPath(), $"fluxengine-{Guid.NewGuid():N}{extension}");
+
+static void TestEngineSettings()
+{
+    var directory = Path.Combine(Path.GetTempPath(), $"fluxengine-{Guid.NewGuid():N}");
+    var path = Path.Combine(directory, "settings.json");
+
+    try
+    {
+        var settings = new EngineSettings
+        {
+            EnableLighting = false,
+            EnableVignette = false,
+            EnableGodRays = false,
+            EnableAtmosphericParticles = false,
+            EnableFog = false,
+            EnableScreenShake = false,
+            Vsync = false,
+            TargetFps = 120,
+            MasterVolume = 0.7f,
+            SfxVolume = 0.6f,
+            MusicVolume = 0.4f,
+        };
+
+        Check(settings.Save(path), "Settings should save to a newly created directory.");
+
+        var loaded = EngineSettings.Load(path);
+        Check(!loaded.EnableLighting && !loaded.EnableVignette && !loaded.EnableGodRays
+            && !loaded.EnableAtmosphericParticles && !loaded.EnableFog && !loaded.EnableScreenShake,
+            "Graphics settings should survive a save/load round trip.");
+        Check(!loaded.Vsync && loaded.TargetFps == 120, "Display settings should survive a save/load round trip.");
+        Near(loaded.MasterVolume, 0.7f, "Master volume should survive a save/load round trip.");
+        Near(loaded.SfxVolume, 0.6f, "SFX volume should survive a save/load round trip.");
+        Near(loaded.MusicVolume, 0.4f, "Music volume should survive a save/load round trip.");
+
+        var bounded = new EngineSettings
+        {
+            TargetFps = -1,
+            MasterVolume = 1.5f,
+            SfxVolume = -0.5f,
+            MusicVolume = float.NaN,
+        };
+        Check(bounded.TargetFps == 0, "Negative target frame rates should select the unlimited setting.");
+        Near(bounded.MasterVolume, 1f, "Volume should be clamped to its maximum.");
+        Near(bounded.SfxVolume, 0f, "Volume should be clamped to its minimum.");
+        Near(bounded.MusicVolume, 0f, "Non-finite volume should safely mute its bus.");
+    }
+    finally
+    {
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
+    }
+}
 
 static void TestPngRoundTrip()
 {

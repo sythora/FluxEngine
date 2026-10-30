@@ -16,13 +16,17 @@ editor are all built in.
   <img src="docs/images/gameplay.png" alt="FluxRunner gameplay" width="72%">
 </p>
 
+<p align="center">
+  <img src="docs/images/settings.png" alt="FluxRunner settings screen" width="72%">
+</p>
+
 ## Highlights
 
 - **PNG, JPEG, and BMP textures** with alpha, decoded by the engine. No
   SDL_image needed.
 - **Two bundled pixel fonts** under the SIL Open Font License: Press Start 2P
   (fixed width) and Silkscreen (variable width). Both are embedded in
-  `FluxEngine.dll`.
+  `FluxEngine.dll`. More font stuff coming soon! **Refer to Roadmap!**
 - **BMFont text maps**: load your own `.fnt` + atlas with `BmFont.Load`.
 - **Runtime PNG writing** through `PngWriter`, so screenshots and generated
   art need no native image library.
@@ -32,6 +36,8 @@ editor are all built in.
   pools, timers, and state machines.
 - **WAV audio** with a simple mixer and gamepad input through SDL's
   game-controller API.
+- **Saved runtime settings** for visual effects, audio buses, VSync, and the
+  frame-rate limit.
 
 ## Quick start
 
@@ -60,6 +66,13 @@ See [GettingStarted.md](docs/GettingStarted.md) for a first scene and
 | Pause / resume | Escape | Start |
 | Restart after game over | R | A |
 | Debug overlay | F3 | - |
+| Toggle lighting, vignette, god rays, particles, fog, shake | L, 1-5 | - |
+| Open settings | O | Y |
+| Save demo settings | F5 | - |
+
+The demo loads and saves its visual-effect settings in `settings.json` in the
+working directory. See [Settings.md](docs/Settings.md) for all settings,
+defaults, and the engine API.
 
 ## PNG textures
 
@@ -164,6 +177,7 @@ dependencies. Screenshots in `docs/images/` come from the demo itself:
 ```text
 dotnet run --project demos/FluxEngine.Demo -- --screenshot shot.png --frame 150
 dotnet run --project demos/FluxEngine.Demo -- --screenshot menu.png --frame 20 --menu
+dotnet run --project demos/FluxEngine.Demo -- --screenshot settings.png --frame 1 --settings
 ```
 
 Optional WAV files (`jump.wav`, `land.wav`, `coin.wav`, `die.wav`,
@@ -179,6 +193,7 @@ skipped with a warning.
 - [Physics](docs/Physics.md)
 - [Input](docs/Input.md)
 - [Audio](docs/Audio.md)
+- [Settings](docs/Settings.md)
 - [Project Structure](docs/PROJECT_STRUCTURE.md)
 - [Roadmap](ROADMAP.md)
 
