@@ -59,17 +59,20 @@ dotnet build FluxEngine.slnx
 dotnet run --project demos/FluxEngine.Demo
 ```
 
-SDL2 has to be findable as `SDL2.dll`. On Windows put it next to the exe or
-somewhere on PATH. If the window never opens, that's almost always why.
+On Windows x64, FluxEngine copies its bundled SDL2 runtime beside the
+executable during build and publish. Other platforms need their SDL2 shared
+library installed in the platform's standard library path.
 
 ## FluxRunner demo controls
 
 - A/D or Left/Right - move
 - Space/Up or gamepad A - jump and double jump
+- Space/A at the title or dialogue screen - begin/advance the story
 - Escape or gamepad Start - pause/resume
 - O or gamepad Y - open settings from the start/pause screen
-- R - restart after game over
+- R or Space/A after a fall - return to the last checkpoint
 - F3 - toggle the debug overlay
 
 The settings screen can save graphics, audio, VSync, and frame-rate options to
 `settings.json`. See [Settings.md](Settings.md).
+The three-chapter journey and its dialogue are described in [Story.md](Story.md).

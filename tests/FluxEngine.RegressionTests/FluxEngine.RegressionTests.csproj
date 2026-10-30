@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../editor/FluxEngine.Editor.csproj" />
+    <ProjectReference Include="../../demos/FluxEngine.Demo/FluxEngine.Demo.csproj" />
   </ItemGroup>
 </Project>

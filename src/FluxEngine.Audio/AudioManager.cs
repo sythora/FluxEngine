@@ -11,10 +11,12 @@ public enum AudioBus
     Music,
 }
 
-// One device and callback; sounds queue instead of playing simultaneously.
+// One device and callback; active sounds are mixed together.
 public sealed class AudioManager : IDisposable
 {
     private readonly List<Playback> _playing = [];
+    private readonly Dictionary<string, Sound> _sounds = new(
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private readonly object _lock = new();
     private readonly SDL.SDL_AudioCallback _callback;
 
@@ -22,6 +24,7 @@ public sealed class AudioManager : IDisposable
     private float[] _mixBuffer = [];
     private byte[] _writeBuffer = [];
     private uint _device;
+    private bool _audioSubsystemInitialized;
     private bool _disposed;
     private float _masterVolume = 1f;
     private float _sfxVolume = 1f;
@@ -31,12 +34,34 @@ public sealed class AudioManager : IDisposable
     {
         _callback = Mix;
 
-        if (SDL.SDL_InitSubSystem(SDL.SDL_INIT_AUDIO) != 0)
-            Log.Warn($"Audio subsystem didn't start: {SDL.SDL_GetError()}");
+        try
+        {
+            _audioSubsystemInitialized = SDL.SDL_InitSubSystem(SDL.SDL_INIT_AUDIO) == 0;
+            if (!_audioSubsystemInitialized)
+                Log.Warn($"Audio subsystem didn't start: {SDL.SDL_GetError()}");
+        }
+        catch (DllNotFoundException exception)
+        {
+            Log.Warn($"Audio subsystem is unavailable: {exception.Message}");
+        }
+        catch (EntryPointNotFoundException exception)
+        {
+            Log.Warn($"Audio subsystem is unavailable: {exception.Message}");
+        }
     }
 
     public bool IsAvailable => _device != 0;
     public bool IsPaused { get; private set; }
+    public int ActiveVoiceCount
+    {
+        get
+        {
+            lock (_lock)
+                return _playing.Count;
+        }
+    }
+
+    public int SoundCount => _sounds.Count;
     public float MasterVolume
     {
         get => _masterVolume;
@@ -62,50 +87,41 @@ public sealed class AudioManager : IDisposable
         if (_disposed)
             throw new ObjectDisposedException(nameof(AudioManager));
 
-        if (!File.Exists(path))
-            throw new FileNotFoundException($"No wav at '{path}'.", path);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var fullPath = Path.GetFullPath(path);
 
-        var source = new SDL.SDL_AudioSpec();
-        var buffer = IntPtr.Zero;
-        uint byteLength = 0;
-        SDL.SDL_AudioSpec spec;
+        if (_sounds.TryGetValue(fullPath, out var cached))
+            return cached;
 
-        try
+        if (!File.Exists(fullPath))
+            throw new FileNotFoundException($"No wav at '{fullPath}'.", fullPath);
+
+        var (spec, samples) = ReadWave(fullPath);
+        EnsureDevice(spec);
+        var channels = spec.channels;
+        var sampleRate = spec.freq;
+
+        if (_device != 0)
         {
-            spec = SDL.SDL_LoadWAV(path, ref source, out buffer, out byteLength);
-        }
-        catch (Exception exception)
-        {
-            throw new InvalidOperationException($"Couldn't read wav '{path}': {SDL.SDL_GetError()}", exception);
+            samples = ConvertSamples(samples, spec.channels, spec.freq, _spec.channels, _spec.freq);
+            channels = _spec.channels;
+            sampleRate = _spec.freq;
         }
 
-        try
-        {
-            if (buffer == IntPtr.Zero || byteLength == 0)
-                throw new InvalidOperationException($"Couldn't load wav '{path}': {SDL.SDL_GetError()}");
-
-            var raw = new byte[byteLength];
-            Marshal.Copy(buffer, raw, 0, raw.Length);
-
-            var samples = Decode(raw, spec.format);
-
-            if (samples is null)
-                throw new InvalidOperationException($"'{path}' uses an audio format I don't handle, use 8 or 16 bit pcm or f32.");
-
-            EnsureDevice(spec);
-            return new Sound(samples, spec.channels, spec.freq);
-        }
-        finally
-        {
-            if (buffer != IntPtr.Zero)
-                SDL.SDL_FreeWAV(buffer);
-        }
+        var sound = new Sound(samples, channels, sampleRate);
+        _sounds.Add(fullPath, sound);
+        return sound;
     }
 
     // volume 0..1, loop keeps it going forever
     public void Play(Sound sound, float volume = 1f, bool loop = false, AudioBus bus = AudioBus.Sfx)
     {
         ArgumentNullException.ThrowIfNull(sound);
+
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        if (bus is not AudioBus.Sfx and not AudioBus.Music)
+            throw new ArgumentOutOfRangeException(nameof(bus));
 
         if (_device == 0)
             return;
@@ -119,6 +135,25 @@ public sealed class AudioManager : IDisposable
             _playing.Add(new Playback(sound, volume, loop, bus));
     }
 
+    public bool UnloadSound(Sound sound)
+    {
+        ArgumentNullException.ThrowIfNull(sound);
+
+        string? path = null;
+        foreach (var pair in _sounds)
+        {
+            if (ReferenceEquals(pair.Value, sound))
+            {
+                path = pair.Key;
+                break;
+            }
+        }
+
+        return path is not null && _sounds.Remove(path);
+    }
+
+    public void ClearSounds() => _sounds.Clear();
+
     public void StopAll()
     {
         lock (_lock)
@@ -127,10 +162,12 @@ public sealed class AudioManager : IDisposable
 
     public void SetPaused(bool paused)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        IsPaused = paused;
+
         if (_device == 0)
             return;
 
-        IsPaused = paused;
         SDL.SDL_PauseAudioDevice(_device, paused ? 1 : 0);
     }
 
@@ -148,12 +185,13 @@ public sealed class AudioManager : IDisposable
             _device = 0;
         }
 
-        SDL.SDL_QuitSubSystem(SDL.SDL_INIT_AUDIO);
+        if (_audioSubsystemInitialized)
+            SDL.SDL_QuitSubSystem(SDL.SDL_INIT_AUDIO);
     }
 
     private void EnsureDevice(SDL.SDL_AudioSpec source)
     {
-        if (_device != 0)
+        if (_device != 0 || !_audioSubsystemInitialized)
             return;
 
         var wanted = new SDL.SDL_AudioSpec
@@ -165,7 +203,20 @@ public sealed class AudioManager : IDisposable
             callback = _callback,
         };
 
-        _device = SDL.SDL_OpenAudioDevice(null!, 0, ref wanted, out _spec, 0);
+        try
+        {
+            _device = SDL.SDL_OpenAudioDevice(null!, 0, ref wanted, out _spec, 0);
+        }
+        catch (DllNotFoundException exception)
+        {
+            Log.Warn($"No audio device, everything stays quiet: {exception.Message}");
+            return;
+        }
+        catch (EntryPointNotFoundException exception)
+        {
+            Log.Warn($"No audio device, everything stays quiet: {exception.Message}");
+            return;
+        }
 
         if (_device == 0)
         {
@@ -173,7 +224,7 @@ public sealed class AudioManager : IDisposable
             return;
         }
 
-        SDL.SDL_PauseAudioDevice(_device, 0);
+        SDL.SDL_PauseAudioDevice(_device, IsPaused ? 1 : 0);
     }
 
     // called by SDL on its audio thread, keep it boring and quick
@@ -193,40 +244,41 @@ public sealed class AudioManager : IDisposable
         EnsureBuffers(sampleCount, length);
         Array.Clear(_mixBuffer, 0, sampleCount);
 
-        var mixedFrames = 0;
-
         lock (_lock)
         {
-            while (mixedFrames < frameCount && _playing.Count > 0)
+            for (var voiceIndex = _playing.Count - 1; voiceIndex >= 0; voiceIndex--)
             {
-                var playback = _playing[0];
-                var available = playback.Frames - playback.Frame;
+                var playback = _playing[voiceIndex];
+                var mixedFrames = 0;
 
-                if (available <= 0)
+                while (mixedFrames < frameCount)
                 {
-                    _playing.RemoveAt(0);
-                    continue;
-                }
+                    var available = playback.Frames - playback.Frame;
 
-                var frames = Math.Min(frameCount - mixedFrames, available);
-                var sourceIndex = playback.Frame * channels;
-                var targetIndex = mixedFrames * channels;
-                var busVolume = playback.Bus == AudioBus.Music ? MusicVolume : SfxVolume;
-                var volume = playback.Volume * MasterVolume * busVolume;
+                    if (available <= 0)
+                    {
+                        if (!playback.Loop)
+                            break;
 
-                for (var i = 0; i < frames * channels; i++)
-                    _mixBuffer[targetIndex + i] += playback.Samples[sourceIndex + i] * volume;
-
-                playback.Frame += frames;
-                mixedFrames += frames;
-
-                if (playback.Frame >= playback.Frames)
-                {
-                    if (playback.Loop)
                         playback.Frame = 0;
-                    else
-                        _playing.RemoveAt(0);
+                        available = playback.Frames;
+                    }
+
+                    var frames = Math.Min(frameCount - mixedFrames, available);
+                    var sourceIndex = playback.Frame * channels;
+                    var targetIndex = mixedFrames * channels;
+                    var busVolume = playback.Bus == AudioBus.Music ? MusicVolume : SfxVolume;
+                    var volume = playback.Volume * MasterVolume * busVolume;
+
+                    for (var i = 0; i < frames * channels; i++)
+                        _mixBuffer[targetIndex + i] += playback.Samples[sourceIndex + i] * volume;
+
+                    playback.Frame += frames;
+                    mixedFrames += frames;
                 }
+
+                if (!playback.Loop && playback.Frame >= playback.Frames)
+                    _playing.RemoveAt(voiceIndex);
             }
         }
 
@@ -244,6 +296,146 @@ public sealed class AudioManager : IDisposable
 
     private static float NormalizeVolume(float value)
         => float.IsFinite(value) ? Math.Clamp(value, 0f, 1f) : 0f;
+
+    private static float[] ConvertSamples(float[] samples, int sourceChannels, int sourceRate, int targetChannels, int targetRate)
+    {
+        if (sourceChannels <= 0 || sourceRate <= 0 || targetChannels <= 0 || targetRate <= 0)
+            throw new InvalidOperationException("The WAV file has an invalid sample rate or channel count.");
+
+        var sourceFrames = samples.Length / sourceChannels;
+        if (sourceFrames == 0)
+            throw new InvalidOperationException("The WAV file contains no complete audio frames.");
+
+        var targetFrameCount = Math.Max(1d, Math.Round(sourceFrames * (double)targetRate / sourceRate));
+        if (targetFrameCount > int.MaxValue / targetChannels)
+            throw new InvalidOperationException("The converted WAV file is too large to load.");
+
+        var targetFrames = (int)targetFrameCount;
+        var converted = new float[targetFrames * targetChannels];
+
+        for (var frame = 0; frame < targetFrames; frame++)
+        {
+            var sourcePosition = frame * (double)sourceRate / targetRate;
+            var firstFrame = Math.Min((int)sourcePosition, sourceFrames - 1);
+            var secondFrame = Math.Min(firstFrame + 1, sourceFrames - 1);
+            var blend = (float)(sourcePosition - firstFrame);
+
+            for (var channel = 0; channel < targetChannels; channel++)
+            {
+                float first;
+                float second;
+
+                if (targetChannels == 1 && sourceChannels > 1)
+                {
+                    first = AverageChannels(samples, firstFrame, sourceChannels);
+                    second = AverageChannels(samples, secondFrame, sourceChannels);
+                }
+                else
+                {
+                    var sourceChannel = sourceChannels == 1 ? 0 : Math.Min(channel, sourceChannels - 1);
+                    first = samples[firstFrame * sourceChannels + sourceChannel];
+                    second = samples[secondFrame * sourceChannels + sourceChannel];
+                }
+
+                converted[frame * targetChannels + channel] = first + (second - first) * blend;
+            }
+        }
+
+        return converted;
+    }
+
+    private static float AverageChannels(float[] samples, int frame, int channels)
+    {
+        var total = 0f;
+        var offset = frame * channels;
+        for (var channel = 0; channel < channels; channel++)
+            total += samples[offset + channel];
+
+        return total / channels;
+    }
+
+    private static (SDL.SDL_AudioSpec Spec, float[] Samples) ReadWave(string path)
+    {
+        var wave = File.ReadAllBytes(path);
+
+        if (wave.Length < 12
+            || !wave.AsSpan(0, 4).SequenceEqual("RIFF"u8)
+            || !wave.AsSpan(8, 4).SequenceEqual("WAVE"u8))
+            throw new InvalidDataException($"'{path}' is not a RIFF/WAVE file.");
+
+        var formatOffset = -1;
+        var formatLength = 0;
+        var dataOffset = -1;
+        var dataLength = 0;
+        var chunkOffset = 12;
+
+        while (chunkOffset <= wave.Length - 8)
+        {
+            var chunkLengthValue = BinaryPrimitives.ReadUInt32LittleEndian(wave.AsSpan(chunkOffset + 4, 4));
+            if (chunkLengthValue > int.MaxValue)
+                throw new InvalidDataException($"'{path}' contains an oversized WAV chunk.");
+
+            var chunkLength = (int)chunkLengthValue;
+            var chunkDataOffset = chunkOffset + 8;
+            if (chunkLength > wave.Length - chunkDataOffset)
+                throw new InvalidDataException($"'{path}' contains a truncated WAV chunk.");
+
+            if (wave.AsSpan(chunkOffset, 4).SequenceEqual("fmt "u8))
+            {
+                formatOffset = chunkDataOffset;
+                formatLength = chunkLength;
+            }
+            else if (wave.AsSpan(chunkOffset, 4).SequenceEqual("data"u8))
+            {
+                dataOffset = chunkDataOffset;
+                dataLength = chunkLength;
+            }
+
+            chunkOffset = chunkDataOffset + chunkLength + (chunkLength & 1);
+        }
+
+        if (formatOffset < 0 || formatLength < 16 || dataOffset < 0 || dataLength == 0)
+            throw new InvalidDataException($"'{path}' is missing a valid WAV format or audio data chunk.");
+
+        var encoding = BinaryPrimitives.ReadUInt16LittleEndian(wave.AsSpan(formatOffset, 2));
+        if (encoding == 0xfffe && formatLength >= 40)
+            encoding = BinaryPrimitives.ReadUInt16LittleEndian(wave.AsSpan(formatOffset + 24, 2));
+
+        var channels = BinaryPrimitives.ReadUInt16LittleEndian(wave.AsSpan(formatOffset + 2, 2));
+        var sampleRateValue = BinaryPrimitives.ReadUInt32LittleEndian(wave.AsSpan(formatOffset + 4, 4));
+        var bitsPerSample = BinaryPrimitives.ReadUInt16LittleEndian(wave.AsSpan(formatOffset + 14, 2));
+
+        if (channels == 0 || channels > byte.MaxValue || sampleRateValue == 0 || sampleRateValue > int.MaxValue)
+            throw new InvalidDataException($"'{path}' has an invalid sample rate or channel count.");
+
+        var sampleFormat = (encoding, bitsPerSample) switch
+        {
+            (1, 8) => SDL.AUDIO_U8,
+            (1, 16) => SDL.AUDIO_S16LSB,
+            (1, 32) => SDL.AUDIO_S32LSB,
+            (3, 32) => SDL.AUDIO_F32LSB,
+            _ => (ushort)0,
+        };
+
+        if (sampleFormat == 0)
+            throw new InvalidDataException($"'{path}' uses an unsupported WAV encoding. Use 8/16/32-bit PCM or 32-bit float.");
+
+        var sampleBytes = BytesPerSample(sampleFormat);
+        if (dataLength % sampleBytes != 0 || dataLength / sampleBytes % channels != 0)
+            throw new InvalidDataException($"'{path}' has incomplete WAV sample frames.");
+
+        var samples = Decode(wave.AsSpan(dataOffset, dataLength).ToArray(), sampleFormat)
+            ?? throw new InvalidDataException($"'{path}' uses an unsupported WAV encoding.");
+
+        var spec = new SDL.SDL_AudioSpec
+        {
+            freq = (int)sampleRateValue,
+            format = sampleFormat,
+            channels = (byte)channels,
+            samples = 2048,
+        };
+        return (spec, samples);
+    }
 
     private void WriteSamples(IntPtr stream, int sampleCount, int bytesPerSample)
     {
@@ -294,7 +486,7 @@ public sealed class AudioManager : IDisposable
         Marshal.Copy(output, 0, stream, sampleCount * bytesPerSample);
     }
 
-    // turns whatever SDL loaded into floats. returns null for formats we skip
+    // turns supported WAV sample formats into floats
     private static float[]? Decode(byte[] raw, ushort format)
     {
         var bytesPerSample = BytesPerSample(format);
@@ -317,10 +509,13 @@ public sealed class AudioManager : IDisposable
                 SDL.AUDIO_S16MSB => Read16(raw, offset, false) / 32768f,
                 SDL.AUDIO_S32LSB => Read32(raw, offset, true) / 2147483648f,
                 SDL.AUDIO_S32MSB => Read32(raw, offset, false) / 2147483648f,
-                SDL.AUDIO_F32LSB => BitConverter.Int32BitsToSingle(Read32(raw, offset, true)),
-                SDL.AUDIO_F32MSB => BitConverter.Int32BitsToSingle(Read32(raw, offset, false)),
+                SDL.AUDIO_F32LSB => ReadFloat(raw, offset, true),
+                SDL.AUDIO_F32MSB => ReadFloat(raw, offset, false),
                 _ => 0f,
             };
+
+            if (!float.IsFinite(samples[i]))
+                samples[i] = 0f;
         }
 
         return samples;
@@ -343,6 +538,9 @@ public sealed class AudioManager : IDisposable
         => littleEndian
             ? BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset, 4))
             : BinaryPrimitives.ReadInt32BigEndian(data.AsSpan(offset, 4));
+
+    private static float ReadFloat(byte[] data, int offset, bool littleEndian)
+        => BitConverter.Int32BitsToSingle(Read32(data, offset, littleEndian));
 
     private static void Write16(byte[] data, int offset, short value, bool littleEndian)
     {

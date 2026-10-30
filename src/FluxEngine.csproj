@@ -31,6 +31,15 @@
     <Compile Include="$(NuGetPackageRoot)sdl2-cs\2.0.0\content\net20\SDL2-CS\LPUtf8StrMarshaler.cs" Link="SDL2\LPUtf8StrMarshaler.cs" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+    <Content Include="FluxEngine.Platform\runtimes\win-x64\native\SDL2.dll"
+             Link="SDL2.dll"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest"
+             Pack="true"
+             PackagePath="runtimes\win-x64\native\" />
+  </ItemGroup>
+
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FluxEngine.Audio;
 using FluxEngine.Content;
 using FluxEngine.Core;
 using FluxEngine.Graphics;
@@ -80,7 +81,9 @@ TestEntityLifecycle();
 TestGameTimer();
 TestLevelLoader();
 TestGameManager();
+TestAudioManager();
 TestEngineSettings();
+TestStoryCampaign();
 TestPngRoundTrip();
 TestBuiltInFontMaps();
 TestDayNightAndLighting();
@@ -304,6 +307,88 @@ static void TestGameManager()
 
 static string TempPath(string extension) => Path.Combine(Path.GetTempPath(), $"fluxengine-{Guid.NewGuid():N}{extension}");
 
+static void TestAudioManager()
+{
+    var path = TempPath(".wav");
+    WriteTestWave(path);
+
+    try
+    {
+        using var audio = new AudioManager();
+        audio.SetPaused(true);
+        var sound = audio.LoadSound(path);
+        var sameSound = audio.LoadSound(Path.Combine(Path.GetDirectoryName(path)!, ".", Path.GetFileName(path)));
+
+        Check(ReferenceEquals(sound, sameSound) && audio.SoundCount == 1, "Audio loads should be cached by normalized full path.");
+        Check(MathF.Abs(sound.Duration - 4f / 22050f) < 0.000001f,
+            "WAV duration should reflect the source frame count and sample rate.");
+        Check(audio.IsPaused, "Pausing before device creation should retain the requested state.");
+
+        var invalidPath = TempPath(".wav");
+        try
+        {
+            File.WriteAllBytes(invalidPath, "not a wave file"u8.ToArray());
+            try
+            {
+                audio.LoadSound(invalidPath);
+                throw new InvalidOperationException("Malformed WAV data should be rejected.");
+            }
+            catch (InvalidDataException)
+            {
+            }
+
+            Check(audio.SoundCount == 1, "Invalid WAV files should not enter the sound cache.");
+        }
+        finally
+        {
+            File.Delete(invalidPath);
+        }
+
+        if (audio.IsAvailable)
+        {
+            audio.Play(sound);
+            audio.Play(sound);
+            Check(audio.ActiveVoiceCount == 2, "Audio playback should allow overlapping voices.");
+            audio.StopAll();
+            Check(audio.ActiveVoiceCount == 0, "StopAll should clear every active voice.");
+        }
+
+        Check(audio.UnloadSound(sound) && audio.SoundCount == 0, "Unloading a cached sound should release its cache entry.");
+        audio.ClearSounds();
+    }
+    finally
+    {
+        File.Delete(path);
+    }
+}
+
+static void WriteTestWave(string path)
+{
+    const int sampleRate = 22050;
+    const short channels = 1;
+    const short bitsPerSample = 16;
+    const int dataLength = 8;
+
+    using var writer = new BinaryWriter(File.Create(path));
+    writer.Write("RIFF"u8);
+    writer.Write(36 + dataLength);
+    writer.Write("WAVE"u8);
+    writer.Write("fmt "u8);
+    writer.Write(16);
+    writer.Write((short)1);
+    writer.Write(channels);
+    writer.Write(sampleRate);
+    writer.Write(sampleRate * channels * bitsPerSample / 8);
+    writer.Write((short)(channels * bitsPerSample / 8));
+    writer.Write(bitsPerSample);
+    writer.Write("data"u8);
+    writer.Write(dataLength);
+    writer.Write((short)0);
+    writer.Write((short)4096);
+    writer.Write((short)0);
+    writer.Write((short)-4096);
+}
+
 static void TestEngineSettings()
 {
     var directory = Path.Combine(Path.GetTempPath(), $"fluxengine-{Guid.NewGuid():N}");
@@ -354,6 +439,40 @@ static void TestEngineSettings()
         if (Directory.Exists(directory))
             Directory.Delete(directory, recursive: true);
     }
+}
+
+static void TestStoryCampaign()
+{
+    var story = new StoryCampaign();
+    Check(StoryCampaign.Prologue.Count >= 2 && StoryCampaign.Chapters.Count == 3 && StoryCampaign.Ending.Count >= 1,
+        "The campaign should provide a prologue, three chapters, and an ending.");
+    Check(story.Distance(StoryCampaign.InitialSpawnX) == 0, "A new campaign should begin at zero progress.");
+    Near(story.ChapterProgress(StoryCampaign.InitialSpawnX + StoryCampaign.ChapterLength / 2f), 0.5f,
+        "Chapter progress should be reported as a normalized value.");
+    Check(!story.TryCompleteChapter(StoryCampaign.InitialSpawnX + StoryCampaign.ChapterLength - 1, out _, out _),
+        "A chapter should not complete before the route threshold.");
+
+    var firstThreshold = StoryCampaign.InitialSpawnX + StoryCampaign.ChapterLength;
+    Check(story.TryCompleteChapter(firstThreshold, out var secondChapter, out var completed),
+        "Reaching a chapter threshold should advance the campaign.");
+    Check(secondChapter == StoryCampaign.Chapters[1] && !completed,
+        "Completing the first chapter should return the next chapter.");
+    Check(story.CheckpointX == firstThreshold && story.Distance(firstThreshold) == StoryCampaign.ChapterLength,
+        "Chapter transitions should save a checkpoint and preserve route progress.");
+
+    story.RespawnAtCheckpoint();
+    Check(story.Distance(firstThreshold) == StoryCampaign.ChapterLength,
+        "Respawning at a checkpoint should preserve completed chapter progress.");
+    Check(story.TryCompleteChapter(firstThreshold + StoryCampaign.ChapterLength, out var finalChapter, out completed)
+        && finalChapter == StoryCampaign.Chapters[2] && !completed,
+        "The second chapter should unlock the final chapter.");
+    Check(story.TryCompleteChapter(firstThreshold + StoryCampaign.ChapterLength * 2, out _, out completed)
+        && completed && story.IsComplete,
+        "The last chapter should complete the campaign.");
+
+    story.Reset();
+    Check(!story.IsComplete && story.CheckpointX == StoryCampaign.InitialSpawnX,
+        "Starting a new story should reset chapter and checkpoint progress.");
 }
 
 static void TestPngRoundTrip()

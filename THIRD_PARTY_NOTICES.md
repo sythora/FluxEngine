@@ -1,7 +1,7 @@
 # Third-Party Notices
 
-FluxEngine bundles the following third-party assets and libraries. Full license
-texts live next to the assets in this repository.
+FluxEngine bundles the following third-party assets and libraries. License
+terms for redistributable assets are included here or next to those assets.
 
 ## StbImageSharp
 
@@ -49,10 +49,31 @@ generated from the original font. The OFL license text is included in full in
 
 - Project: Simple DirectMedia Layer 2 (zlib license)
 - Binding: `SDL2-CS` (zlib license)
+- Runtime: SDL2 2.0.20, Windows x64, in
+  `src/FluxEngine.Platform/runtimes/win-x64/native/SDL2.dll`
 - Source: https://www.libsdl.org/ and https://github.com/flibitijibibo/SDL2-CS
 
-FluxEngine does not redistribute SDL2 binaries. See the SDL2 license for the
-copy you place next to the executable.
+SDL2 is distributed under the zlib license:
+
+> This software is provided 'as-is', without any express or implied
+> warranty. In no event will the authors be held liable for any damages
+> arising from the use of this software.
+>
+> Permission is granted to anyone to use this software for any purpose,
+> including commercial applications, and to alter it and redistribute it
+> freely, subject to the following restrictions:
+>
+> 1. The origin of this software must not be misrepresented; you must not
+>    claim that you wrote the original software. If you use this software
+>    in a product, an acknowledgment in the product documentation would be
+>    appreciated but is not required.
+> 2. Altered source versions must be plainly marked as such, and must not be
+>    misrepresented as being the original software.
+> 3. This notice may not be removed or altered from any source distribution.
+
+The bundled runtime's version metadata identifies SDL 2.0.20. FluxEngine
+copies the Windows x64 runtime to build and publish output automatically.
+Other platforms still require SDL2 from their system or distribution.
 
 ## OFL summary
 

@@ -54,6 +54,22 @@ font.Draw(renderer, text, new Vector2((960 - width) / 2, 200), Color.White, 4f);
 var size = font.Measure("LINE ONE\nLINE TWO", 2f);
 ```
 
+For dialogue, use a decorative font for headings and a compact font for
+paragraphs. Bitmap fonts draw only; a UI can wrap lines using `MeasureWidth`:
+
+```csharp
+var headingFont = BuiltInFonts.Load(engine.Renderer, BuiltInFont.PressStart2P);
+var paragraphFont = BuiltInFonts.Load(engine.Renderer, BuiltInFont.Silkscreen);
+
+headingFont.Draw(engine.Renderer, "THE QUIET ROOFTOPS", new Vector2(32, 32), Color.Yellow, 2f);
+paragraphFont.Draw(
+    engine.Renderer,
+    "The rooftops used to be loud after sunset.\nNova follows a trail of lanterns toward the river.",
+    new Vector2(32, 80),
+    Color.White,
+    2f);
+```
+
 ## Loading a BMFont map
 
 `BmFont.Load` reads a text-format `.fnt` map, resolves the page texture

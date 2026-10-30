@@ -38,17 +38,16 @@ public sealed class PlatformGenerator : Component
     {
         // A wide landing sits just below the player spawn, so a new run starts
         // on safe ground instead of falling while the first random platforms load.
-        SpawnPlatform(new Vector2(250f, 360f), 520f);
-        _nextSpawnX = 510f; // right edge of the starter platform
+        Reset(StoryCampaign.InitialSpawnX);
     }
 
-    public void Reset()
+    public void Reset(float playerSpawnX)
     {
         _platforms.Clear();
         _hazards.Clear();
         _coins.Clear();
         _spawnedPlatforms = 0;
-        _nextSpawnX = 510f;
+        _nextSpawnX = playerSpawnX + 410f;
         _difficultyTimer = 0;
         _minGap = 55f;
         _maxGap = 90f;
@@ -56,7 +55,7 @@ public sealed class PlatformGenerator : Component
         _maxPlatformWidth = 220f;
         _maxHeightDiff = 55f;
 
-        SpawnPlatform(new Vector2(250f, 360f), 520f);
+        SpawnPlatform(new Vector2(playerSpawnX + 150f, 360f), 520f);
     }
 
     public override void OnUpdate(float deltaTime)

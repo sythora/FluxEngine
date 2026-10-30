@@ -173,7 +173,12 @@ public sealed class Engine : IDisposable
         }
     }
 
-    public void Shutdown() => _window.Close();
+    public void Shutdown()
+    {
+        _audio?.Dispose();
+        Assets.Clear();
+        _window.Close();
+    }
 
     private AudioManager CreateAudioManager()
     {
@@ -219,7 +224,6 @@ public sealed class Engine : IDisposable
     public void Dispose()
     {
         _settings.Changed -= OnSettingsChanged;
-        _audio?.Dispose();
         Shutdown();
         GC.SuppressFinalize(this);
     }

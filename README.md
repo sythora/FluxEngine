@@ -5,19 +5,23 @@
 [![SDL2](https://img.shields.io/badge/SDL2-2.0-1B4F72?logo=SDL&logoColor=white)](https://www.libsdl.org/)
 [![Tests](https://img.shields.io/badge/tests-regression%20suite-2ea44f)](#tests)
 
-A small 2D game engine in C# on top of SDL2, plus **FluxRunner**: an infinite
-pixel-art platformer that exercises the whole thing. PNG textures, alpha
-blending, bitmap fonts, physics, particles, parallax, audio, and a scene
-editor are all built in.
+A small 2D game engine in C# on top of SDL2, plus **FluxRunner**: a pixel-art
+story platformer that exercises the whole thing. PNG textures, alpha blending,
+bitmap fonts, physics, particles, parallax, audio, and a scene editor are all
+built in.
 
 ![FluxRunner start screen](docs/images/start-screen.png)
 
 <p align="center">
-  <img src="docs/images/gameplay.png" alt="FluxRunner gameplay" width="72%">
+  <img src="docs/images/gameplay.png" alt="FluxRunner story gameplay" width="72%">
 </p>
 
 <p align="center">
   <img src="docs/images/settings.png" alt="FluxRunner settings screen" width="72%">
+</p>
+
+<p align="center">
+  <img src="docs/images/story.png" alt="FluxRunner story dialogue" width="72%">
 </p>
 
 ## Highlights
@@ -26,7 +30,7 @@ editor are all built in.
   SDL_image needed.
 - **Two bundled pixel fonts** under the SIL Open Font License: Press Start 2P
   (fixed width) and Silkscreen (variable width). Both are embedded in
-  `FluxEngine.dll`. More font stuff coming soon! **Refer to Roadmap!**
+  `FluxEngine.dll` and used for titles, HUD, and wrapped dialogue.
 - **BMFont text maps**: load your own `.fnt` + atlas with `BmFont.Load`.
 - **Runtime PNG writing** through `PngWriter`, so screenshots and generated
   art need no native image library.
@@ -34,17 +38,17 @@ editor are all built in.
 - **Fixed-timestep loop** with variable rendering, AABB and circle collision,
   moving and one-way platforms, camera follow/shake, particles, tweens, object
   pools, timers, and state machines.
-- **WAV audio** with a simple mixer and gamepad input through SDL's
-  game-controller API.
+- **WAV audio** with overlapping voices, sample caching, resampling, and
+  separate SFX/music volume buses; gamepad input uses SDL's game-controller
+  API.
 - **Saved runtime settings** for visual effects, audio buses, VSync, and the
   frame-rate limit.
 
 ## Quick start
 
-Requires the .NET 10 SDK. On Windows/macOS/Linux, put `SDL2.dll` (or the
-platform equivalent) next to the demo executable or on `PATH`. On Windows,
-grab `SDL2-devel-2.0.20-VC.zip` from https://www.libsdl.org/ and copy
-`x64/SDL2.dll` beside the exe.
+Requires the .NET 10 SDK. On Windows x64, the engine copies its bundled SDL2
+runtime beside the executable automatically. On macOS/Linux, provide the
+platform's SDL2 shared library through the usual system library path.
 
 ```text
 dotnet build FluxEngine.slnx
@@ -64,10 +68,11 @@ See [GettingStarted.md](docs/GettingStarted.md) for a first scene and
 | Move | A / D or Left / Right | Left stick / D-pad |
 | Jump / double jump | Space / Up | A |
 | Pause / resume | Escape | Start |
-| Restart after game over | R | A |
+| Respawn at last checkpoint | R or Space | A |
 | Debug overlay | F3 | - |
 | Toggle lighting, vignette, god rays, particles, fog, shake | L, 1-5 | - |
 | Open settings | O | Y |
+| Advance story dialogue | Space / Up | A |
 | Save demo settings | F5 | - |
 
 The demo loads and saves its visual-effect settings in `settings.json` in the
@@ -136,12 +141,14 @@ src/                       Engine source
   FluxEngine.Audio/        WAV loading and mixing
   FluxEngine.Input/        Keyboard, mouse, named actions, gamepads
   FluxEngine.Platform/     SDL window, renderer, event loop
+    runtimes/win-x64/      Bundled SDL2 runtime for Windows x64
   FluxEngine.Content/      Asset cache, BMFont parser, built-in fonts
   FluxEngine.Content/Fonts/ Embedded atlases, maps, and OFL texts
 editor/                    Standalone WinForms scene editor
-demos/FluxEngine.Demo/     FluxRunner infinite platformer
+demos/FluxEngine.Demo/     FluxRunner story platformer demo
 tests/                     Regression and gamepad test projects
 docs/                      Guides and screenshots
+assets/                    Original WAV samples used by FluxRunner
 build/                     All build output (git-ignored)
 ```
 
@@ -178,11 +185,16 @@ dependencies. Screenshots in `docs/images/` come from the demo itself:
 dotnet run --project demos/FluxEngine.Demo -- --screenshot shot.png --frame 150
 dotnet run --project demos/FluxEngine.Demo -- --screenshot menu.png --frame 20 --menu
 dotnet run --project demos/FluxEngine.Demo -- --screenshot settings.png --frame 1 --settings
+dotnet run --project demos/FluxEngine.Demo -- --screenshot story.png --frame 1 --story
 ```
 
-Optional WAV files (`jump.wav`, `land.wav`, `coin.wav`, `die.wav`,
-`music.wav`) are picked up from the same `assets/` folder. Missing files are
-skipped with a warning.
+Original WAV samples (`jump.wav`, `land.wav`, `coin.wav`, `die.wav`, and
+`music.wav`) are included in the root `assets/` folder and picked up by the
+demo automatically. Replace them with your own WAVs to customize the sound.
+
+FluxRunner now has three story chapters, checkpoint respawns, an opening
+prologue, chapter dialogue, and an ending. See [Story.md](docs/Story.md) for
+the story text and how to add more dialogue.
 
 ## Documentation
 
@@ -194,6 +206,7 @@ skipped with a warning.
 - [Input](docs/Input.md)
 - [Audio](docs/Audio.md)
 - [Settings](docs/Settings.md)
+- [Story and Dialogue](docs/Story.md)
 - [Project Structure](docs/PROJECT_STRUCTURE.md)
 - [Roadmap](ROADMAP.md)
 

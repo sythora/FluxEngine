@@ -14,6 +14,7 @@ var screenshotPath = GetOption(args, "--screenshot");
 var screenshotFrame = GetIntOption(args, "--frame", 90);
 var inMenu = HasFlag(args, "--menu");
 var inSettings = HasFlag(args, "--settings");
+var inStory = HasFlag(args, "--story");
 var renderedFrames = 0;
 var screenshotTaken = false;
 
@@ -96,7 +97,7 @@ generatorEnt.AddComponent(generator);
 // its camera-free drawing cannot affect world rendering.
 var hudFont = BuiltInFonts.Load(engine.Renderer, BuiltInFont.PressStart2P);
 var smallFont = BuiltInFonts.Load(engine.Renderer, BuiltInFont.Silkscreen);
-var ui = new GameUI(engine.Input.Actions, hudFont, engine.Settings)
+var ui = new GameUI(engine.Input.Actions, hudFont, smallFont, engine.Settings)
 {
     DayNight = scene.Lighting.DayNight,
 };
@@ -133,8 +134,10 @@ fog.Alpha = 0.4f;
 // Game state
 // ---------------------------------------------------------------------------
 
-var state = 0; // 0=StartMenu, 1=Playing, 2=Paused, 3=GameOver
+var state = 0; // 0=StartMenu, 1=Playing, 2=Paused, 3=GameOver, 4=Settings, 5=Dialogue, 6=Ending
 var returnState = 0;
+var story = new StoryCampaign();
+ui.ChapterTitle = story.CurrentChapterTitle;
 var debugOverlay = new DebugOverlay(engine.Input.Actions);
 var score = 0;
 var bestDistance = 0f;
@@ -142,6 +145,7 @@ var hasBestDistance = false;
 var distance = 0f;
 var survivalTime = 0f;
 var startX = 100f;
+ui.ChapterProgress = story.ChapterProgress(startX);
 playerEnt.Position = new Vector2(startX, 300f);
 // Left barrier only: blocks walking backwards into negative space, with no floor or right wall to obstruct the run
 scene.Solids.Add(new BoxCollider(new Vector2(-40, 360), new Vector2(40, 2000)));
@@ -169,7 +173,7 @@ actions.BindGamepadButton("settings", GamepadButton.Y);
 
 var respawnCooldown = 0f;
 
-// Helper to restart the game from scratch
+// Respawn at the latest story checkpoint and rebuild the nearby route.
 void RestartGame()
 {
     if (state == 3)
@@ -181,10 +185,15 @@ void RestartGame()
     state = 1;
     respawnCooldown = 0f;
     ui.Reset();
-    distance = 0f;
+    story.RespawnAtCheckpoint();
+    startX = story.CheckpointX;
+    ui.ChapterTitle = story.CurrentChapterTitle;
+    distance = story.Distance(startX);
+    ui.ChapterProgress = story.ChapterProgress(startX);
     survivalTime = 0f;
-    score = 0;
-    startX = 100f;
+    ui.Score = score;
+    ui.Distance = distance;
+    ui.SurvivalTime = survivalTime;
 
     // Reset player
     playerEnt.Position = new Vector2(startX, 300f);
@@ -195,7 +204,7 @@ void RestartGame()
 
     // Reset camera position to starter platform
     if (scene.Camera is not null)
-        scene.Camera.Position = new Vector2(viewWidth / 2f, viewHeight / 2f);
+        scene.Camera.Position = new Vector2(startX + viewWidth / 2f, viewHeight / 2f);
 
     // Destroy all existing platforms, coins, hazards
     foreach (var tag in new[] { "platform", "coin", "hazard" })
@@ -209,7 +218,7 @@ void RestartGame()
     scene.Solids.Add(new BoxCollider(new Vector2(-40, 360), new Vector2(40, 2000)));
 
     // Reset generator
-    generator.Reset();
+    generator.Reset(startX);
 }
 
 // Start all components' OnStart callbacks
@@ -220,6 +229,11 @@ if (screenshotPath is not null && inSettings)
 {
     state = 4;
     ui.OpenSettings();
+}
+else if (screenshotPath is not null && inStory)
+{
+    state = 5;
+    ui.ShowDialogue("A SIGNAL IN THE DARK", StoryCampaign.Prologue);
 }
 else if (screenshotPath is not null && !inMenu)
 {
@@ -330,8 +344,24 @@ engine.Run(
 
         if (state == 0 && actions.WasPressed("jump"))
         {
-            state = 1;
-            ui.StartGame();
+            state = 5;
+            ui.ShowDialogue("A SIGNAL IN THE DARK", StoryCampaign.Prologue);
+            return;
+        }
+
+        if (state == 5 && actions.WasPressed("jump"))
+        {
+            if (ui.AdvanceDialogue())
+                state = 1;
+        }
+
+        if (state == 6 && (actions.WasPressed("jump") || actions.WasPressed("restart")))
+        {
+            story.Reset();
+            score = 0;
+            RestartGame();
+            state = 5;
+            ui.ShowDialogue("A SIGNAL IN THE DARK", StoryCampaign.Prologue);
         }
 
         if (state == 1 && actions.WasPressed("pause"))
@@ -375,7 +405,35 @@ engine.Run(
         // --- Game logic ---
 
         // Distance traveled (player moves right from start)
-        distance = MathF.Max(distance, playerEnt.Position.X - startX);
+        distance = story.Distance(playerEnt.Position.X);
+        ui.ChapterProgress = story.ChapterProgress(playerEnt.Position.X);
+        if (story.TryCompleteChapter(playerEnt.Position.X, out var nextChapter, out var campaignComplete))
+        {
+            distance = story.Distance(playerEnt.Position.X);
+            ui.ChapterProgress = story.ChapterProgress(playerEnt.Position.X);
+            bestDistance = MathF.Max(bestDistance, distance);
+            hasBestDistance = true;
+            ui.Distance = distance;
+            ui.BestDistance = bestDistance;
+            ui.Score = score;
+            ui.SurvivalTime = survivalTime;
+
+            if (campaignComplete)
+            {
+                state = 6;
+                ui.ShowEnding();
+            }
+            else if (nextChapter is not null)
+            {
+                ui.ChapterTitle = nextChapter.Title;
+                scene.Lighting.DayNight.SetHour(19f + story.CompletedChapters * 1.5f);
+                state = 5;
+                ui.ShowDialogue(nextChapter.Title, nextChapter.Pages);
+            }
+
+            return;
+        }
+
         if (distance > bestDistance || !hasBestDistance)
         {
             bestDistance = distance;
